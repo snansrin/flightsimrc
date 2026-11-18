@@ -15,7 +15,7 @@ import './style.css'
 const zero: Controls = { throttle: 0, aileron: 0, elevator: 0, rudder: 0 }
 function Aircraft({ state, controls, cameraMode, vehicle }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; cameraMode: 'chase' | 'pilot'; vehicle: VehicleKind }) {
   const ref = useRef<THREE.Group>(null)
-  useFrame(({ camera }) => {
+  useFrame(({ camera }, dt) => {
     const s = state.current
     if (!ref.current) return
     ref.current.position.set(...s.position)
@@ -25,8 +25,8 @@ function Aircraft({ state, controls, cameraMode, vehicle }: { state: React.Mutab
     const desired = cameraMode === 'pilot'
       ? new THREE.Vector3(12, 1.8, -55)
       : new THREE.Vector3(s.position[0] - Math.sin(s.yaw) * chaseDistance, s.position[1] + chaseHeight, s.position[2] - Math.cos(s.yaw) * chaseDistance)
-    camera.position.lerp(desired, cameraMode === 'pilot' ? .1 : .07)
-    camera.lookAt(s.position[0], s.position[1] + (cameraMode === 'pilot' ? 0 : .15), s.position[2] + (cameraMode === 'pilot' ? 0 : 2))
+    camera.position.lerp(desired, 1 - Math.exp(-dt * (cameraMode === 'pilot' ? 6 : 4)))
+    camera.lookAt(s.position[0] + (cameraMode === 'pilot' ? 0 : Math.sin(s.yaw) * .6), s.position[1] + (cameraMode === 'pilot' ? 0 : .15), s.position[2] + (cameraMode === 'pilot' ? 0 : Math.cos(s.yaw) * .6))
   })
   return <group ref={ref}><VehicleModel kind={vehicle} controls={controls} /></group>
 }
@@ -97,10 +97,21 @@ function App() {
         }
         controls.current = { ...zero }
       }
-      if (pad) controls.current = controllerArmed ? gamepadControls(pad, mapping, tuning, calibration) : { ...zero }
+      if (pad) {
+        const target = controllerArmed ? gamepadControls(pad, mapping, tuning, calibration) : zero
+        const response = 1 - Math.exp(-delta * 10)
+        controls.current = {
+          throttle: controls.current.throttle + (target.throttle - controls.current.throttle) * response,
+          aileron: controls.current.aileron + (target.aileron - controls.current.aileron) * response,
+          elevator: controls.current.elevator + (target.elevator - controls.current.elevator) * response,
+          rudder: controls.current.rudder + (target.rudder - controls.current.rudder) * response,
+        }
+      }
       else {
         const k = keys.current
-        controls.current = { throttle: Math.max(0, Math.min(1, controls.current.throttle + ((k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0)) * delta * 0.35)), aileron: (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0), elevator: (k.has('ArrowUp') ? 1 : 0) - (k.has('ArrowDown') ? 1 : 0), rudder: (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0) }
+        const target = { aileron: (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0), elevator: (k.has('ArrowUp') ? 1 : 0) - (k.has('ArrowDown') ? 1 : 0), rudder: (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0) }
+        const response = 1 - Math.exp(-delta * 7)
+        controls.current = { throttle: Math.max(0, Math.min(1, controls.current.throttle + ((k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0)) * delta * .45)), aileron: controls.current.aileron + (target.aileron - controls.current.aileron) * response, elevator: controls.current.elevator + (target.elevator - controls.current.elevator) * response, rudder: controls.current.rudder + (target.rudder - controls.current.rudder) * response }
       }
       if (!paused) { accumulator += delta; while (accumulator >= 1 / 60) { flight.current = stepVehicle(vehicle, flight.current, controls.current, 1 / 60, airfields[fieldIndex].wind); if (!flight.current.crashed) flightSeconds.current += 1 / 60; accumulator -= 1 / 60 } }
       sound.current?.update(vehicle, controls.current.throttle, flight.current.airspeed, paused || flight.current.crashed)

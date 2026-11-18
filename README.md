@@ -8,7 +8,7 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Supabase bağlant�
 
 ## Mimari ve mevcut sınırlar
 
-- `src/flight.ts`: 60 Hz sabit adımlı trainer dinamiği; hava hızına bağlı kaldırma/sürükleme, yan rüzgâr, stall, açısal hız, yatışa bağlı dönüş, yan kayma ve yer teması. Hız vektörü dönüşte aniden döndürülmez. Katsayılar uçuş testiyle doğrulanmadı; tam 6DoF fizik iddiası yoktur.
+- `src/flight.ts`: 60 Hz sabit adımlı, hava akışına bağlı 3B kuvvet entegrasyonu; kaldırma/sürükleme, kademeli stall, yan rüzgâr, sönümlü açısal hareket, yatışla yönelen kaldırma ve pist teması. Kamera ve giriş tepkisi de kare hızından bağımsız yumuşatılır. Katsayılar uçuş testiyle doğrulanmadı; tam 6DoF fizik iddiası yoktur. Ayrıntı ve doğrulama sınırları [uçuş modeli belgesinde](docs/flight-model.md).
 - `src/vehicles.ts`: jet için farklı itki/kaldırma/stall profili; drone ve helikopter için ayrı, stabilize edilmiş hover ve yönelim tepkisi. Bunlar uçuş eğitimi prototipleridir; gerçek rotor, EDF, motor veya ESC performansıyla kalibre edilmemiştir.
 - `src/audio.ts`: kullanıcı ses düğmesine bastığında başlayan Web Audio motor/rotor/EDF sentezi. Sesler gerçek motor kayıtları veya akustik ölçüm değildir.
 - `src/input.ts`: Gamepad kanal eşlemesi, kanal tersleme, ölü bölge, expo ve ölçülen min/orta/maks değerlerine göre eksen normalizasyonu. Profiller cihaz kimliğine göre bu tarayıcıda saklanır. Gerçek kumandalarla uyumluluk ve kalibrasyon doğrulaması henüz yapılmadı.
