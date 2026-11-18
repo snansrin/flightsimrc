@@ -9,7 +9,7 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 ## Mimari ve mevcut sınırlar
 
 - `src/flight.ts`: 60 Hz sabit adımlı trainer dinamiği; hava hızına bağlı kaldırma/sürükleme, yan rüzgâr, stall, açısal hız, yatışa bağlı dönüş, yan kayma ve yer teması. Hız vektörü dönüşte aniden döndürülmez. Katsayılar uçuş testiyle doğrulanmadı; tam 6DoF fizik iddiası yoktur.
-- `src/input.ts`: Gamepad kanal eşlemesi ve deadzone. Eşleme tarayıcıda saklanır. Kalibrasyon aralığı, kanal tersleme ve cihaz profilleri sonraki aşamadır.
+- `src/input.ts`: Gamepad kanal eşlemesi, kanal tersleme, ölü bölge ve expo. Ayarlar tarayıcıda saklanır; ayar paneli ham eksen hareketini gösterir. Min/merkez/max kalibrasyon sihirbazı ve cihaz profilleri sonraki aşamadır.
 - `src/scene/Trainer.tsx`: özgün kodla oluşturulmuş trainer geometrisi, kanat oranları, iniş takımı ve hareketli kontrol yüzeyleri. [Apprentice STS kılavuzundaki](https://www.horizonhobby.com/on/demandware.static/Sites-horizon-us-Site/Sites-horizon-master/default/Manuals/EFL3700-Manual-EN.pdf) 1500 mm kanat açıklığı / 1080 mm gövde uzunluğu sınıfı referans alındı; marka modeli veya çizimi kopyalanmadı.
 - `src/scene/Airfield.tsx`: dokulu pist, hangar, rüzgâr tulumu, ağaçlar, ufuk tepeleri ve beş renk/rüzgâr teması. Beş saha henüz ayrı coğrafi veriler veya gerçek havaalanları değildir.
 - `src/main.tsx`: kamera, hava hızı/irtifa/yatış/burun açısı HUD'u, stall uyarısı, tam ekran ve kullanıcı arayüzü. Pilot kamerası sabit RC pilot görüşü, takip kamerası uçuşu öğrenme görüşü sağlar.
@@ -18,7 +18,7 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 ## Sonraki uygulama aşamaları
 
 1. Trainer aerodinamiği ve çarpışmayı ölçümlerle doğrulama; JSBSim gibi referans FDM ile karşılaştırma, rüzgâr türbülansı, hasar ve uçuş tekrarı. [JSBSim kuvvet/moment yaklaşımı](https://jsbsim-team.github.io/jsbsim-reference-manual/user/concepts/forces-and-moments/) incelendi; bu prototipte henüz kullanılmıyor.
-2. Gerçek kalibrasyon sihirbazı: min/merkez/max, tersleme, expo, deadzone, USB kumanda profilleri ve cihaz test ekranı.
+2. Kalibrasyon sihirbazı: min/merkez/max örnekleme, USB kumanda profilleri ve kaydedilen ayarların cihaza göre ayrılması.
 3. Araç arayüzü ve ayrı dinamik modelleri: planör, akrobasi, multikopter, helikopter. Bu araçlar mevcut MVP'de uçulabilir değildir.
 4. Beş ayrı arazi/pist, eğitim görevleri, ilerleme puanı ve erişilebilir arayüz.
 5. Supabase Auth ile hesap/ilerleme; şemanın gerçek projede kurulumu ve RLS testleri. Anahtarlar yalnızca ortam değişkenleri ile saklanmalı; service role anahtarı istemciye konmamalı.
