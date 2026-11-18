@@ -13,11 +13,20 @@ export type RemotePilot = {
   roll: number
   updatedAt: number
 }
+export type RoomPilot = { id: string; name: string; isHost: boolean }
 export type RoomState = 'connecting' | 'connected' | 'disconnected' | 'error'
 export const ROOM_LIMIT = 4
 const vehicles: VehicleKind[] = ['trainer', 'drone', 'helicopter', 'jet']
 export const normalizeRoomCode = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
+export const normalizePilotName = (value: string) => value.trim().replace(/\s+/g, ' ').replace(/[\u0000-\u001f\u007f<>]/g, '').slice(0, 24)
 export const createRoomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), byte => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[byte % 32]).join('')
+export async function roomTopic(code: string, password: string): Promise<string> {
+  const normalized = normalizeRoomCode(code)
+  if (!password) return `flightsimrc:${normalized}`
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bytes = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(`flightsimrc-room-v1:${normalized}`), iterations: 120000, hash: 'SHA-256' }, key, 256))
+  return `flightsimrc:${normalized}:${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`
+}
 const finite = (value: unknown, limit: number) => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= limit
 
 export function parsePilot(value: unknown): RemotePilot | null {
@@ -32,10 +41,14 @@ export function parsePilot(value: unknown): RemotePilot | null {
 
 export function connectRoom(options: {
   code: string
+  topic: string
   id: string
+  name: string
+  isHost: boolean
   getFlight: () => { state: FlightState; vehicle: VehicleKind; field: number }
   onStatus: (status: RoomState, message?: string) => void
   onPeers: (peers: RemotePilot[], count: number) => void
+  onRoster: (pilots: RoomPilot[]) => void
   onField: (field: number) => void
 }): () => void {
   if (!cloud) { options.onStatus('error', 'Bulut bağlantısı bulunamadı.'); return () => {} }
@@ -46,22 +59,36 @@ export function connectRoom(options: {
   let ready = false
   let closed = false
   let count = 1
+  let hasConnected = false
+  let promoted = false
+  let failed = false
+  const joinedAt = Date.now()
   const emit = () => options.onPeers([...peers.values()], count)
   const syncPresence = () => {
     const entries = Object.values(channel.presenceState()).flat() as Record<string, unknown>[]
-    const ids = new Set(entries.map(e => e.id).filter((id): id is string => typeof id === 'string'))
+    const members = entries.filter(e => typeof e.id === 'string' && typeof e.name === 'string' && normalizePilotName(e.name) === e.name && e.name.length >= 2 && typeof e.joinedAt === 'number').sort((a, b) => Number(a.joinedAt) - Number(b.joinedAt))
+    const hostSeen = members.some(entry => entry.isHost === true)
+    const roster = members.map((entry, index) => ({ id: entry.id as string, name: entry.name as string, isHost: index === 0 }))
+    options.onRoster(roster)
+    const ids = new Set(roster.map(pilot => pilot.id))
     count = ids.size || 1
     for (const id of peers.keys()) if (!ids.has(id)) peers.delete(id)
-    const host = entries.filter(e => Number.isInteger(e.field) && typeof e.joinedAt === 'number').sort((a, b) => Number(a.joinedAt) - Number(b.joinedAt))[0]
+    const host = members.find(e => Number.isInteger(e.field))
     if (host && host.id !== options.id) options.onField(host.field as number)
     emit()
     if (count > ROOM_LIMIT) {
+      failed = true
       options.onStatus('error', 'Oda dolu (en fazla 4 pilot).')
       void cloud?.removeChannel(channel)
       ready = false
     }
+    if (!options.isHost && !hasConnected && ready && count > 1 && hostSeen && count <= ROOM_LIMIT) { hasConnected = true; options.onStatus('connected') }
+    if (!hostSeen && hasConnected && !options.isHost && !promoted && members[0]?.id === options.id) {
+      promoted = true
+      void channel.track({ id: options.id, name: normalizePilotName(options.name), isHost: true, field: options.getFlight().field, joinedAt })
+    }
   }
-  channel = cloud.channel(`flightsimrc:${code}`, { config: { broadcast: { self: false }, presence: { key: options.id } } })
+  channel = cloud.channel(options.topic, { config: { broadcast: { self: false }, presence: { key: options.id } } })
     .on('broadcast', { event: 'flight' }, ({ payload }) => {
       const pilot = parsePilot(payload)
       if (!pilot || pilot.id === options.id || !channel.presenceState()[pilot.id]) return
@@ -73,20 +100,29 @@ export function connectRoom(options: {
       if (closed) return
       if (status === 'SUBSCRIBED') {
         const field = options.getFlight().field
-        const result = await channel.track({ id: options.id, field, joinedAt: Date.now() })
-        if (result !== 'ok') { options.onStatus('error', 'Odaya giriş doğrulanamadı.'); return }
+        const result = await channel.track({ id: options.id, name: normalizePilotName(options.name), isHost: options.isHost, field, joinedAt })
+        if (result !== 'ok') { failed = true; options.onStatus('error', 'Odaya giriş doğrulanamadı.'); return }
         ready = true
-        options.onStatus('connected')
+        if (options.isHost) { hasConnected = true; options.onStatus('connected') }
+        else syncPresence()
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         ready = false
+        failed = true
         options.onStatus('error', error?.message || 'Canlı bağlantı kesildi.')
-      } else if (status === 'CLOSED') {
+      } else if (status === 'CLOSED' && !failed) {
         ready = false
         options.onStatus('disconnected')
       }
     })
+  const joinTimeout = window.setTimeout(() => {
+    if (closed || options.isHost || hasConnected) return
+    ready = false
+    failed = true
+    options.onStatus('error', 'Oda bulunamadı veya şifre yanlış. Kodu ve şifreyi kontrol et.')
+    void cloud?.removeChannel(channel)
+  }, 6000)
   const timer = window.setInterval(() => {
-    if (!ready || document.hidden) return
+    if (!ready || !hasConnected || document.hidden) return
     const { state, vehicle, field } = options.getFlight()
     const packet = { id: options.id, vehicle, field, position: state.position, yaw: state.yaw, pitch: state.pitch, roll: state.roll }
     void channel.send({ type: 'broadcast', event: 'flight', payload: packet })
@@ -97,7 +133,9 @@ export function connectRoom(options: {
     closed = true
     ready = false
     window.clearInterval(timer)
+    window.clearTimeout(joinTimeout)
     void cloud?.removeChannel(channel)
     options.onPeers([], 1)
+    options.onRoster([])
   }
 }

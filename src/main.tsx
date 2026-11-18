@@ -3,15 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { type Controls, type FlightState } from './flight'
-import { defaultMapping, defaultTuning, defaultChannels, deviceSources, detectMovedSource, gamepadControls, normalizeSource, readSource, type Mapping, type InputSource, type AxisKey, type InputTuning, type Calibration } from './input'
+import { calibrateAxis, defaultMapping, defaultTuning, defaultChannels, deviceSources, detectMovedSource, gamepadControls, normalizeSource, readSource, type Mapping, type InputSource, type AxisKey, type InputTuning, type Calibration } from './input'
 import { VehicleModel } from './scene/Vehicles'
 import { Airfield, airfields } from './scene/Airfield'
 import { initialVehicle, stepVehicle, vehicles, type VehicleKind } from './vehicles'
 import { EngineAudio } from './audio'
-import { cloud } from './cloud'
-import { connectRoom, createRoomCode, normalizeRoomCode, type RemotePilot, type RoomState } from './multiplayer'
+import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
 import { RemoteAircraft } from './scene/RemoteAircraft'
-import type { User } from '@supabase/supabase-js'
 import './style.css'
 
 const zero: Controls = { throttle: 0, aileron: 0, elevator: 0, rudder: 0 }
@@ -91,33 +89,36 @@ function App() {
   const [paused, setPaused] = useState(false)
   const [cameraMode, setCameraMode] = useState<'chase' | 'pilot'>('chase')
   const [showSettings, setShowSettings] = useState(false)
-  const [showAccount, setShowAccount] = useState(false)
-  const [email, setEmail] = useState('')
-  const [accountMessage, setAccountMessage] = useState('')
-  const [user, setUser] = useState<User | null>(null)
   const [showRoom, setShowRoom] = useState(false)
   const [roomInput, setRoomInput] = useState(() => normalizeRoomCode(new URLSearchParams(location.search).get('room') || ''))
+  const [pilotName, setPilotName] = useState(() => localStorage.getItem('flight-pilot-name') || '')
+  const [roomPassword, setRoomPassword] = useState('')
+  const [roomIsHost, setRoomIsHost] = useState(false)
+  const [roomIsProtected, setRoomIsProtected] = useState(false)
+  const [roomChannel, setRoomChannel] = useState('')
   const [roomCode, setRoomCode] = useState('')
   const [roomStatus, setRoomStatus] = useState<RoomState>('disconnected')
   const [roomMessage, setRoomMessage] = useState('')
   const [peers, setPeers] = useState<RemotePilot[]>([])
   const [roomCount, setRoomCount] = useState(1)
+  const [roomPilots, setRoomPilots] = useState<RoomPilot[]>([])
   const pilotId = useRef(crypto.randomUUID())
   const roomFlight = useRef({ vehicle, fieldIndex })
   roomFlight.current = { vehicle, fieldIndex }
   const flightSeconds = useRef(0)
   useEffect(() => {
-    if (!roomCode) return
+    if (!roomCode || !roomChannel) return
     setRoomStatus('connecting')
     const disconnect = connectRoom({
-      code: roomCode, id: pilotId.current,
+      code: roomCode, topic: roomChannel, id: pilotId.current, name: pilotName, isHost: roomIsHost,
       getFlight: () => ({ state: flight.current, vehicle: roomFlight.current.vehicle, field: roomFlight.current.fieldIndex }),
       onStatus: (status, message) => { setRoomStatus(status); if (message) setRoomMessage(message) },
       onPeers: (remote, count) => { setPeers(remote); setRoomCount(count) },
+      onRoster: setRoomPilots,
       onField: field => { if (field !== roomFlight.current.fieldIndex) { setFieldIndex(field); flight.current = initialVehicle(roomFlight.current.vehicle); flightSeconds.current = 0 } },
     })
     return disconnect
-  }, [roomCode])
+  }, [roomCode, roomChannel, roomIsHost])
   useEffect(() => {
     if (!detectKey) return
     const timer = window.setTimeout(() => { setDetectKey(null); setControllerMessage('Eksen hareketi algılanmadı. Kolu daha geniş hareket ettirip tekrar dene.') }, 8000)
@@ -142,12 +143,6 @@ function App() {
     setControllerMessage(`${detectKey} için ${source} bulundu. Min/orta/maks konumlarını kalibre et.`)
     setDetectKey(null)
   }, [padAxes, padButtons, detectKey])
-  useEffect(() => {
-    if (!cloud) return
-    void cloud.auth.getUser().then(({ data }) => setUser(data.user))
-    const { data: { subscription } } = cloud.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null))
-    return () => subscription.unsubscribe()
-  }, [])
   useEffect(() => {
     const down = (e: KeyboardEvent) => { if (e.target instanceof HTMLElement && (e.target.closest('input,select,button,textarea') || e.target.isContentEditable)) return; if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault(); keys.current.add(e.code) }
     const up = (e: KeyboardEvent) => keys.current.delete(e.code)
@@ -217,22 +212,6 @@ function App() {
     frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame)
   }, [calibration, controllerArmed, fieldIndex, mapping, selectedPadIndex, tuning, paused, vehicle])
   const reset = (kind: VehicleKind = vehicle) => { flight.current = initialVehicle(kind); flightSeconds.current = 0; controls.current = { ...zero }; setHud(flight.current) }
-  const requestLogin = async (event: React.FormEvent) => {
-    event.preventDefault()
-    if (!cloud) return
-    const { error } = await cloud.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL } })
-    setAccountMessage(error ? error.message : 'Giriş bağlantısı e-posta adresine gönderildi.')
-  }
-  const saveFlight = async () => {
-    if (!cloud) { setAccountMessage('Bulut bağlantısı henüz yapılandırılmadı.'); setShowAccount(true); return }
-    const { data: { user: currentUser }, error: authError } = await cloud.auth.getUser()
-    if (authError || !currentUser) { setAccountMessage('Uçuşu kaydetmek için giriş yap.'); setShowAccount(true); return }
-    const duration = Math.floor(flightSeconds.current)
-    if (duration < 10) { setAccountMessage('Kayıt için en az 10 saniye uçuş yap.'); setShowAccount(true); return }
-    const { error } = await cloud.from('training_flights').insert({ user_id: currentUser.id, airfield: airfields[fieldIndex].name, vehicle, duration_seconds: duration })
-    setAccountMessage(error ? `Kayıt yapılamadı: ${error.message}` : `${duration} saniyelik uçuş kaydedildi.`)
-    setShowAccount(true)
-  }
   const toggleSound = async () => { if (sound.current) { await sound.current.close(); sound.current = null; setSoundOn(false) } else { sound.current = new EngineAudio(); await sound.current.resume(); setSoundOn(true) } }
   const saveDeviceSetting = (name: string, value: unknown) => { if (deviceProfileId.current) localStorage.setItem(`flight-device:${deviceProfileId.current}:${name}`, JSON.stringify(value)) }
   const updateMapping = (key: AxisKey, source: InputSource) => {
@@ -254,6 +233,10 @@ function App() {
     if (raw === undefined) return
     const next = { ...calibration, [key]: { min: -1, center: 0, max: 1, ...calibration[key], [point]: raw } }
     setCalibration(next); saveDeviceSetting('calibration', next)
+    setControllerArmed(false)
+    const nextTuning = { ...tuning, reversed: { ...tuning.reversed, [key]: false } }
+    setTuning(nextTuning); saveDeviceSetting('tuning', nextTuning)
+    setControllerMessage(`${key} ${point} noktası ${raw.toFixed(2)} kaydedildi. Kalibrasyon bitince yönü ve gaz sıfırını kontrol et.`)
   }
   const updateAuxiliary = (index: number, source: InputSource) => {
     const next = [...auxiliary]; next[index] = source; setAuxiliary(next); saveDeviceSetting('auxiliary', next)
@@ -266,6 +249,7 @@ function App() {
     if (raw === undefined) return
     const next = [...auxCalibration]; next[index] = { min: -1, center: 0, max: 1, ...next[index], [point]: raw }
     setAuxCalibration(next); saveDeviceSetting('auxCalibration', next)
+    setControllerArmed(false)
   }
   const sourceOptions = (selected: InputSource) => {
     const sources = deviceSources(padAxes.length, padButtons.length)
@@ -281,19 +265,32 @@ function App() {
     setControllerArmed(true)
     setControllerMessage('Kumanda hazır. Paneli kapatıp Devam düğmesine bas.')
   }
-  const joinRoom = (code: string) => {
+  const joinRoom = async (code: string, isHost: boolean) => {
     const normalized = normalizeRoomCode(code)
     if (normalized.length < 6) { setRoomMessage('En az 6 karakterlik oda kodu gir.'); return }
+    const name = normalizePilotName(pilotName)
+    if (name.length < 2) { setRoomMessage('Pilot adın 2–24 karakter olmalı.'); return }
+    if (roomPassword && roomPassword.length < 8) { setRoomMessage('Oda şifresi en az 8 karakter olmalı.'); return }
+    let topic: string
+    try { topic = await roomTopic(normalized, roomPassword) }
+    catch { setRoomMessage('Şifre hazırlanamadı. Güvenli bağlantı kullandığından emin ol.'); return }
+    localStorage.setItem('flight-pilot-name', name)
     setRoomMessage('')
     setRoomInput(normalized)
+    setRoomIsHost(isHost)
+    setRoomIsProtected(Boolean(roomPassword))
+    setRoomChannel(topic)
     setRoomCode(normalized)
+    setRoomPassword('')
     setShowRoom(true)
     history.replaceState(null, '', `${location.pathname}?room=${normalized}`)
   }
   const leaveRoom = () => {
     setRoomCode('')
+    setRoomChannel('')
     setRoomStatus('disconnected')
     setPeers([])
+    setRoomPilots([])
     setRoomCount(1)
     setRoomMessage('')
     history.replaceState(null, '', location.pathname)
@@ -305,11 +302,30 @@ function App() {
   const speed = hud.airspeed
   const bank = Math.round(hud.roll * 180 / Math.PI)
   const pitch = Math.round(hud.pitch * 180 / Math.PI)
-  return <main><header><div className="brand"><span className="mark">✦</span><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => setShowAccount(true)}>{user ? '◉ Hesabım' : '◉ Giriş yap'}</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
+  return <main><header><div className="brand"><span className="mark">✦</span><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
     <section className="intro"><div><p className="eyebrow">RC PİLOTLUĞA İLK ADIM</p><h1>Uçuşu hisset.<br/><em>Kontrolü öğren.</em></h1><p>Pervaneli trainer, drone, helikopter veya RC jet seç. Kumandanı bağla ya da klavyeyle eğitime başla.</p></div><div className="lesson"><span>01 / TEMEL EĞİTİM</span><strong>{vehicles.find(item => item.id === vehicle)?.className}</strong><p>{vehicles.find(item => item.id === vehicle)?.lesson}. Gazı dikkatle artır; sert inişte aracı sıfırla.</p></div></section>
-    <section className="sim" ref={simRef}><div className="simtop"><div><span className="red-dot">●</span> CANLI SİMÜLATÖR <span className="sep">/</span> {vehicles.find(item => item.id === vehicle)?.name.toUpperCase()}</div><div>{padName.slice(0, 42)} bağlı</div></div><div className="viewport"><Scene state={flight} controls={controls} field={airfields[fieldIndex]} cameraMode={cameraMode} vehicle={vehicle} peers={peers} />{hud.crashed && <div className="crash"><strong>Sert iniş</strong><span>Yeni uçuş için sıfırla</span><button onClick={() => reset()}>Yeniden başla</button></div>}<div className="crosshair">+</div><div className="scene-label"><strong>{airfields[fieldIndex].name}</strong><span>{airfields[fieldIndex].subtitle} · {Math.abs(airfields[fieldIndex].wind).toFixed(1)} m/s yan rüzgâr</span></div>{hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}<div className="attitude"><span>YATIŞ {bank}°</span><span>BURUN {pitch}°</span><span>ALFA {Math.round(hud.angleOfAttack * 180 / Math.PI)}°</span></div><div className="hud"><div><small>HAVA HIZI</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div><div><small>İRTİFA</small><strong>{Math.round(Math.max(0, hud.position[1] - .25))}</strong><span>m</span></div><div><small>GAZ</small><strong>{Math.round(controls.current.throttle * 100)}</strong><span>%</span></div><div><small>BAŞ</small><strong>{Math.round((hud.yaw * 180 / Math.PI + 3600) % 360)}</strong><span>°</span></div></div></div><div className="toolbar"><label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value as VehicleKind; setVehicle(next); reset(next) }}>{vehicles.map(item => <option key={item.id} value={item.id}>{item.name} · {item.className}</option>)}</select></label><label>UÇUŞ ALANI <select value={fieldIndex} disabled={Boolean(roomCode)} onChange={e => { setFieldIndex(Number(e.target.value)); reset() }}>{airfields.map((f, i) => <option value={i} key={f.name}>{f.name}</option>)}</select></label><div><button onClick={() => setCameraMode(cameraMode === 'chase' ? 'pilot' : 'chase')}>{cameraMode === 'chase' ? '◉ Pilot görüşü' : '◉ Takip görüşü'}</button><button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>⛶ Tam ekran</button><button onClick={() => void toggleSound()}>{soundOn ? '◖ Sesi kapat' : '◖ Sesi aç'}</button><button onClick={() => setPaused(!paused)}>{paused ? '▶ Devam' : 'Ⅱ Duraklat'}</button><button onClick={() => void saveFlight()}>▣ Uçuşu kaydet</button><button onClick={() => reset()}>↺ Uçağı sıfırla</button></div></div></section>
+    <section className="sim" ref={simRef}><div className="simtop"><div><span className="red-dot">●</span> CANLI SİMÜLATÖR <span className="sep">/</span> {vehicles.find(item => item.id === vehicle)?.name.toUpperCase()}</div><div>{padName.slice(0, 42)} bağlı</div></div><div className="viewport"><Scene state={flight} controls={controls} field={airfields[fieldIndex]} cameraMode={cameraMode} vehicle={vehicle} peers={peers} />{hud.crashed && <div className="crash"><strong>Sert iniş</strong><span>Yeni uçuş için sıfırla</span><button onClick={() => reset()}>Yeniden başla</button></div>}<div className="crosshair">+</div><div className="scene-label"><strong>{airfields[fieldIndex].name}</strong><span>{airfields[fieldIndex].subtitle} · {Math.abs(airfields[fieldIndex].wind).toFixed(1)} m/s yan rüzgâr</span></div>{hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}<div className="attitude"><span>YATIŞ {bank}°</span><span>BURUN {pitch}°</span><span>ALFA {Math.round(hud.angleOfAttack * 180 / Math.PI)}°</span></div><div className="hud"><div><small>HAVA HIZI</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div><div><small>İRTİFA</small><strong>{Math.round(Math.max(0, hud.position[1] - .25))}</strong><span>m</span></div><div><small>GAZ</small><strong>{Math.round(controls.current.throttle * 100)}</strong><span>%</span></div><div><small>BAŞ</small><strong>{Math.round((hud.yaw * 180 / Math.PI + 3600) % 360)}</strong><span>°</span></div></div></div><div className="toolbar"><label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value as VehicleKind; setVehicle(next); reset(next) }}>{vehicles.map(item => <option key={item.id} value={item.id}>{item.name} · {item.className}</option>)}</select></label><label>UÇUŞ ALANI <select value={fieldIndex} disabled={Boolean(roomCode)} onChange={e => { setFieldIndex(Number(e.target.value)); reset() }}>{airfields.map((f, i) => <option value={i} key={f.name}>{f.name}</option>)}</select></label><div><button onClick={() => setCameraMode(cameraMode === 'chase' ? 'pilot' : 'chase')}>{cameraMode === 'chase' ? '◉ Pilot görüşü' : '◉ Takip görüşü'}</button><button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>⛶ Tam ekran</button><button onClick={() => void toggleSound()}>{soundOn ? '◖ Sesi kapat' : '◖ Sesi aç'}</button><button onClick={() => setPaused(!paused)}>{paused ? '▶ Devam' : 'Ⅱ Duraklat'}</button><button onClick={() => reset()}>↺ Uçağı sıfırla</button></div></div></section>
     <section className="info"><div><span>01</span><strong>KLAVYE</strong><p>W / S gaz · Oklar pitch ve roll · A / D roll · Q / E dümen. Drone ve helikopterde yaklaşık %50 gaz hover bölgesidir.</p></div><div><span>02</span><strong>RC KUMANDA / JOYSTICK</strong><p>USB cihazını bağla. Gamepad API üzerinden otomatik algılanır; kanal eşlemesini ayarlardan değiştir.</p></div><div><span>03</span><strong>ARAÇ DİNAMİĞİ</strong><p>Trainer ve jet için ayrı sabit kanat profilleri; drone ve helikopter için stabilize edilmiş rotor tepkisi. Modeller uçuş verileriyle kalibre edilmeli.</p></div></section>
-    {showRoom && <div className="overlay" onClick={() => setShowRoom(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowRoom(false)}>✕</button><p className="eyebrow">CANLI UÇUŞ</p><h2>Çok oyunculu oda</h2><p>Aynı kodla en fazla dört pilot aynı sahada uçar. Oda bağlantısı olan herkes uçuş konumlarını görebilir.</p>{roomCode ? <><p><strong>Oda: {roomCode}</strong> · {roomCount} pilot · {roomStatus === 'connected' ? 'Bağlı' : roomStatus === 'connecting' ? 'Bağlanıyor' : 'Bağlantı yok'}</p><button className="account-action" onClick={() => void copyRoomLink()}>Davet bağlantısını kopyala</button><button className="room-leave" onClick={leaveRoom}>Odadan ayrıl</button></> : <><button className="account-action" onClick={() => joinRoom(createRoomCode())}>Yeni oda oluştur</button><form onSubmit={e => { e.preventDefault(); joinRoom(roomInput) }}><label className="email-field">Oda kodu<input value={roomInput} maxLength={10} onChange={e => setRoomInput(normalizeRoomCode(e.target.value))} placeholder="Örn. ABCD2345" /></label><button className="account-action">Odaya katıl</button></form></>}{roomMessage && <p role="status">{roomMessage}</p>}<p className="muted">Canlı konum yaklaşık saniyede beş kez paylaşılır; uçuş kayıtları veritabanına sürekli yazılmaz. Bu serbest uçuş sürümünde yarış hakemliği ve hile koruması yoktur.</p></aside></div>}{showAccount && <div className="overlay" onClick={() => setShowAccount(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowAccount(false)}>✕</button><p className="eyebrow">PİLOT HESABI</p><h2>{user ? 'Pilot hesabı' : 'Giriş yap'}</h2>{user ? <><p>{user.email} ile giriş yapıldı. Uçuşu kaydet düğmesiyle eğitim uçuşunu hesabına ekleyebilirsin.</p><button className="account-action" onClick={() => { void cloud?.auth.signOut(); setAccountMessage('Oturum kapatıldı.') }}>Çıkış yap</button></> : <form onSubmit={event => void requestLogin(event)}><p>E-posta adresine tek kullanımlık giriş bağlantısı gönderilir.</p><label className="email-field">E-posta<input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label><button className="account-action" disabled={!cloud}>Giriş bağlantısı gönder</button></form>}{accountMessage && <p role="status">{accountMessage}</p>}</aside></div>}    {showSettings && <div className="overlay" onClick={() => setShowSettings(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowSettings(false)}>✕</button><p className="eyebrow">GİRİŞ AYARLARI</p><h2>Kumanda kanalları</h2><p>Bağlı cihaz: {padName}. Bir düğmeye basarak cihazı tarayıcıda etkinleştir.</p><ControllerDiscovery pads={availablePads} selected={selectedPadIndex} onSelect={index => { setSelectedPadIndex(index); setControllerArmed(false); setPaused(true) }} onMessage={setControllerMessage} /><p className="muted">Tarayıcı bu cihazda {padAxes.length} eksen ve {padButtons.length} düğme bildiriyor. Panel, tarayıcının sunduğu {padAxes.length + padButtons.length} girdi için oluşur. Her girdi ayrı eşlenebilir.</p>{(Object.keys(mapping) as AxisKey[]).slice(0, Math.min(4, padAxes.length + padButtons.length)).map((key, index) => <div className="axis" key={key}><label htmlFor={`axis-${key}`}>{`Kanal ${index + 1} · ${key}`}</label><select id={`axis-${key}`} value={mapping[key]} onChange={e => updateMapping(key, e.target.value as InputSource)}>{sourceOptions(mapping[key])}</select><label className="reverse"><input type="checkbox" checked={tuning.reversed[key]} onChange={e => updateTuning({ ...tuning, reversed: { ...tuning.reversed, [key]: e.target.checked } })} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(key)}>{detectKey === key ? 'Kolu oynat…' : 'Ekseni bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'max')}>Maks</button></div></div>)}{auxiliary.map((source, index) => <div className="axis" key={index}><label htmlFor={`aux-${index}`}>Kanal {index + 5} · yardımcı</label><select id={`aux-${index}`} value={source} onChange={e => updateAuxiliary(index, e.target.value as InputSource)}>{sourceOptions(source)}</select><label className="reverse"><input type="checkbox" checked={auxReversed[index]} onChange={e => { const next = [...auxReversed]; next[index] = e.target.checked; setAuxReversed(next); saveDeviceSetting('auxReversed', next) }} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(`aux:${index}`)}>{detectKey === `aux:${index}` ? 'Kolu oynat…' : 'Kanalı bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'max')}>Maks</button></div><small className="channel-value">{(() => { const raw = source.startsWith('axis:') ? padAxes[Number(source.slice(5))] : padButtons[Number(source.slice(7))] * 2 - 1; if (!Number.isFinite(raw)) return 'Girdi yok'; const range = auxCalibration[index]; const calibrated = range && range.center - range.min >= .15 && range.max - range.center >= .15 ? Math.max(-1, Math.min(1, raw < range.center ? (raw - range.center) / (range.center - range.min) : (raw - range.center) / (range.max - range.center))) : raw; return `${((auxReversed[index] ? -1 : 1) * calibrated).toFixed(2)}` })()}</small></div>)}<label className="tuning">Ölü bölge {Math.round(tuning.deadzone * 100)}%<input type="range" min="0" max="0.2" step="0.01" value={tuning.deadzone} onChange={e => updateTuning({ ...tuning, deadzone: Number(e.target.value) })} /></label><label className="tuning">Expo {Math.round(tuning.expo * 100)}%<input type="range" min="0" max="0.8" step="0.05" value={tuning.expo} onChange={e => updateTuning({ ...tuning, expo: Number(e.target.value) })} /></label><button className="account-action" type="button" disabled={(!padAxes.length && !padButtons.length) || controllerArmed} onClick={armController}>{controllerArmed ? 'Kumanda hazır' : 'Kumandayı etkinleştir'}</button>{controllerMessage && <p role="status">{controllerMessage}</p>}<div className="axis-monitor"><strong>CANLI GİRDİLER · {padAxes.length} EKSEN / {padButtons.length} DÜĞME</strong>{padAxes.length ? padAxes.map((value, i) => <div key={i}>Eksen {i + 1}<meter min={-1} max={1} value={value} />{value.toFixed(2)}</div>) : <p>Eksen görünmüyor.</p>}{padButtons.map((value, i) => <div key={`button-${i}`}>Düğme {i + 1}<meter min={0} max={1} value={value} />{value.toFixed(2)}</div>)}</div><p className="muted">İlk dört girdi uçuşu kontrol eder; sonraki girdiler izleme ve profil ayarları içindir. Her kanal için kolu en düşük, orta ve en yüksek konuma getirip ilgili düğmeye bas. Gaz ekseninde orta için kolu yarıya getir. Ayarlar bağlı cihaza özel saklanır. Kalibrasyondan sonra gaz yönünü ve sıfır gazı kontrol et.</p></aside></div>}
+    {showRoom && <div className="overlay" onClick={() => setShowRoom(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowRoom(false)}>✕</button><p className="eyebrow">CANLI UÇUŞ</p><h2>Çok oyunculu oda</h2>
+      {roomCode ? <>
+        <p><strong>Oda: {roomCode}</strong> · {roomIsProtected ? 'Şifreli' : 'Şifresiz'} · {roomCount} pilot</p>
+        <p role="status">{roomStatus === 'connected' ? 'Bağlı' : roomStatus === 'connecting' ? 'Oda aranıyor…' : roomStatus === 'error' ? 'Bağlantı kurulamadı' : 'Bağlantı yok'}</p>
+        <div className="pilot-roster"><strong>Pilotlar</strong>{roomPilots.length ? <ul>{roomPilots.map(pilot => <li key={pilot.id}><span>{pilot.name}{pilot.id === pilotId.current ? ' (sen)' : ''}</span><small>{pilot.isHost ? 'Kurucu' : 'Pilot'}</small></li>)}</ul> : <p>Pilotlar bağlandığında burada görünür.</p>}</div>
+        <button className="account-action" onClick={() => void copyRoomLink()}>Davet bağlantısını kopyala</button>
+        <button className="room-leave" onClick={leaveRoom}>{roomStatus === 'error' ? 'Tekrar dene' : 'Odadan ayrıl'}</button>
+        {roomIsProtected && <p className="muted">Davet bağlantısı şifreyi içermez. Şifreyi katılacak pilotlara ayrıca ilet.</p>}
+      </> : <>
+        <p>Pilot adını yaz. Yeni oda kurarken isteğe bağlı şifre belirle; katılan pilot aynı kodu ve şifreyi girsin.</p>
+        <label className="email-field">Pilot adı<input value={pilotName} maxLength={24} onChange={e => setPilotName(e.target.value)} placeholder="Örn. Sinan" autoComplete="nickname" /></label>
+        <label className="email-field">Oda şifresi (isteğe bağlı)<input type="password" value={roomPassword} minLength={8} maxLength={64} onChange={e => setRoomPassword(e.target.value)} placeholder="En az 8 karakter" autoComplete="off" /></label>
+        <button className="account-action" onClick={() => void joinRoom(createRoomCode(), true)}>Yeni oda oluştur</button>
+        <label className="email-field">Oda kodu<input value={roomInput} maxLength={10} onChange={e => setRoomInput(normalizeRoomCode(e.target.value))} placeholder="Örn. ABCD2345" /></label>
+        <button className="account-action" onClick={() => void joinRoom(roomInput, false)}>Odaya katıl</button>
+      </>}
+      {roomMessage && <p role="alert">{roomMessage}</p>}
+      <p className="muted">En fazla dört pilot. Şifreli odada yalnızca doğru kod ve şifreden türetilen kanala bağlanılır; bu sürümde sunucu tarafı hesap doğrulaması ve güçlü erişim denetimi yoktur.</p>
+    </aside></div>}
+    {showSettings && <div className="overlay" onClick={() => setShowSettings(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowSettings(false)}>✕</button><p className="eyebrow">GİRİŞ AYARLARI</p><h2>Kumanda kanalları</h2><p>Bağlı cihaz: {padName}. Bir düğmeye basarak cihazı tarayıcıda etkinleştir.</p><ControllerDiscovery pads={availablePads} selected={selectedPadIndex} onSelect={index => { setSelectedPadIndex(index); setControllerArmed(false); setPaused(true) }} onMessage={setControllerMessage} /><p className="muted">Tarayıcı bu cihazda {padAxes.length} eksen ve {padButtons.length} düğme bildiriyor. Panel, tarayıcının sunduğu {padAxes.length + padButtons.length} girdi için oluşur. Her girdi ayrı eşlenebilir.</p>{(Object.keys(mapping) as AxisKey[]).slice(0, Math.min(4, padAxes.length + padButtons.length)).map((key, index) => <div className="axis" key={key}><label htmlFor={`axis-${key}`}>{`Kanal ${index + 1} · ${key}`}</label><select id={`axis-${key}`} value={mapping[key]} onChange={e => updateMapping(key, e.target.value as InputSource)}>{sourceOptions(mapping[key])}</select><label className="reverse"><input type="checkbox" checked={tuning.reversed[key]} onChange={e => updateTuning({ ...tuning, reversed: { ...tuning.reversed, [key]: e.target.checked } })} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(key)}>{detectKey === key ? 'Kolu oynat…' : 'Ekseni bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'max')}>Maks</button></div></div>)}{auxiliary.map((source, index) => <div className="axis" key={index}><label htmlFor={`aux-${index}`}>Kanal {index + 5} · yardımcı</label><select id={`aux-${index}`} value={source} onChange={e => updateAuxiliary(index, e.target.value as InputSource)}>{sourceOptions(source)}</select><label className="reverse"><input type="checkbox" checked={auxReversed[index]} onChange={e => { const next = [...auxReversed]; next[index] = e.target.checked; setAuxReversed(next); saveDeviceSetting('auxReversed', next) }} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(`aux:${index}`)}>{detectKey === `aux:${index}` ? 'Kolu oynat…' : 'Kanalı bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'max')}>Maks</button></div><small className="channel-value">{(() => { const raw = source.startsWith('axis:') ? padAxes[Number(source.slice(5))] : padButtons[Number(source.slice(7))] * 2 - 1; if (!Number.isFinite(raw)) return 'Girdi yok'; const range = auxCalibration[index]; const calibrated = calibrateAxis(raw, range); return `${((auxReversed[index] ? -1 : 1) * calibrated).toFixed(2)}` })()}</small></div>)}<label className="tuning">Ölü bölge {Math.round(tuning.deadzone * 100)}%<input type="range" min="0" max="0.2" step="0.01" value={tuning.deadzone} onChange={e => updateTuning({ ...tuning, deadzone: Number(e.target.value) })} /></label><label className="tuning">Expo {Math.round(tuning.expo * 100)}%<input type="range" min="0" max="0.8" step="0.05" value={tuning.expo} onChange={e => updateTuning({ ...tuning, expo: Number(e.target.value) })} /></label><button className="account-action" type="button" disabled={(!padAxes.length && !padButtons.length) || controllerArmed} onClick={armController}>{controllerArmed ? 'Kumanda hazır' : 'Kumandayı etkinleştir'}</button>{controllerMessage && <p role="status">{controllerMessage}</p>}<div className="axis-monitor"><strong>CANLI GİRDİLER · {padAxes.length} EKSEN / {padButtons.length} DÜĞME</strong>{padAxes.length ? padAxes.map((value, i) => <div key={i}>Eksen {i + 1}<meter min={-1} max={1} value={value} />{value.toFixed(2)}</div>) : <p>Eksen görünmüyor.</p>}{padButtons.map((value, i) => <div key={`button-${i}`}>Düğme {i + 1}<meter min={0} max={1} value={value} />{value.toFixed(2)}</div>)}</div><p className="muted">İlk dört girdi uçuşu kontrol eder; sonraki girdiler izleme ve profil ayarları içindir. Her kanal için kolu en düşük, orta ve en yüksek konuma getirip ilgili düğmeye bas. Gaz ekseninde orta için kolu yarıya getir. Ayarlar bağlı cihaza özel saklanır. Kalibrasyondan sonra gaz yönünü ve sıfır gazı kontrol et.</p></aside></div>}
   </main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

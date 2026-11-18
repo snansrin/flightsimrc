@@ -48,8 +48,12 @@ export function detectMovedAxis(baseline: number[], current: number[], threshold
   return largest >= threshold ? changes.indexOf(largest) : null
 }
 export function calibrateAxis(raw: number, range?: AxisCalibration): number {
-  if (!range || !Number.isFinite(raw) || !Number.isFinite(range.min) || !Number.isFinite(range.center) || !Number.isFinite(range.max) || range.center - range.min < .15 || range.max - range.center < .15) return Math.max(-1, Math.min(1, raw || 0))
-  return Math.max(-1, Math.min(1, raw < range.center ? (raw - range.center) / (range.center - range.min) : (raw - range.center) / (range.max - range.center)))
+  if (!range || !Number.isFinite(raw) || !Number.isFinite(range.min) || !Number.isFinite(range.center) || !Number.isFinite(range.max)) return Math.max(-1, Math.min(1, raw || 0))
+  const direction = range.max > range.min ? 1 : -1
+  const low = range.min * direction, middle = range.center * direction, high = range.max * direction
+  if (middle - low < .15 || high - middle < .15) return Math.max(-1, Math.min(1, raw))
+  const value = raw * direction
+  return Math.max(-1, Math.min(1, value < middle ? (value - middle) / (middle - low) : (value - middle) / (high - middle)))
 }
 export function gamepadControls(pad: Gamepad, mapping: Mapping, tuning: InputTuning = defaultTuning, calibration: Calibration = {}): Controls {
   const axis = (key: AxisKey) => calibrateAxis(readSource(pad, mapping[key]) ?? 0, calibration[key]) * (tuning.reversed[key] ? -1 : 1)

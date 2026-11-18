@@ -11,7 +11,7 @@ FlightSimRC; model uçak, drone, helikopter ve EDF jet kontrolünü öğrenmek i
 1. [FlightSimRC'yi aç](https://snansrin.github.io/flightsimrc/).
 2. Trainer 1500 ve Anadolu Eğitim Pisti ile başla. Klavyede **W/S gaz**, **yön tuşları ve A/D yatış**, **yukarı/aşağı burun**, **Q/E dümen**.
 3. USB RC kumandanı veya joystick'ini tak. **Kumanda ayarları** bütün bağlı cihazları ve her birinin eksen/düğme sayısını gösterir; otomatik seçimde ilk görünen cihaz kullanılır. Birden fazla cihaz bağlıysa listeden istediğini seç. Kanal paneli seçilen cihazın tarayıcıya sunduğu girdi sayısı kadar açılır; sabit 12 kanal sınırı yoktur. Her kanal için **Ekseni bul/Kanalı bul** düğmesine basıp ilgili kolu veya anahtarı hareket ettir; ardından min/orta/maks değerlerini kaydet. Gaz sıfırdayken **Kumandayı etkinleştir**. İlk dört kanal uçuşa bağlıdır; ek kanallar şimdilik izleme ve cihaz profili içindir.
-4. Arkadaşınla uçmak için **Çok oyunculu → Yeni oda oluştur**. Davet bağlantısını paylaş; diğer pilot aynı bağlantıyla odaya katılsın. Oda en fazla dört pilot içindir.
+4. Arkadaşınla uçmak için **Çok oyunculu** panelinde pilot adını yaz, istersen en az 8 karakterlik oda şifresi belirle ve **Yeni oda oluştur**. Davet bağlantısını paylaş; şifre koyduysan onu ayrıca ilet. Diğer pilot aynı kod ve şifreyle katılır. Pilot adları ve kurucu odada listelenir. Oda en fazla dört pilot içindir.
 
 ### RadioLink T12D görünmüyorsa
 
@@ -26,17 +26,16 @@ Tarayıcı bir kumandanın yalnızca işletim sisteminin ve Gamepad API'nin sund
 | Uçuş | 60 Hz sabit adımlı trainer/jet kuvvet modeli; ayrı stabilize drone ve helikopter davranışı; stall, rüzgâr ve yer teması |
 | Görsel | Kodla oluşturulmuş dört araç, dokulu pist, hangar, HDR gökyüzü, HUD, takip ve sabit pilot kamerası |
 | Kumanda | Gamepad API, cihaz seçimi, cihaz bazlı profil, eksen eşleme, tersleme, ölü bölge, expo, min/orta/maks kalibrasyonu, sıfır gaz güvenlik adımı |
-| Canlı oda | Supabase Realtime ile oda kodu, pilot varlığı, yaklaşık 5 Hz konum paylaşımı ve diğer araçların sahnede gösterimi |
-| Hesap | Supabase e-posta bağlantısıyla giriş ve kullanıcının açıkça seçtiği uçuş kaydı |
+| Canlı oda | Supabase Realtime ile oda kodu, isteğe bağlı şifre, pilot adı/listesi, yaklaşık 5 Hz konum paylaşımı ve diğer araçların sahnede gösterimi |
 | Yayın | Her `main` güncellemesinde GitHub Actions test/derleme ve GitHub Pages yayını |
 
-Beş uçuş alanı şu an farklı hava/renk temalarıdır; beş ayrı gerçek coğrafi saha değildir. Çok oyunculu odalar herkese açık Realtime kanallarıdır: davet bağlantısını bilen biri konumları görebilir. Kullanıcı e-postası veya hesap kimliği canlı konum paketine konmaz. Bu serbest uçuş sürümünde yetkili sunucu, çarpışma mutabakatı, yarış hakemliği ve hile önleme yoktur.
+Beş uçuş alanı şu an farklı hava/renk temalarıdır; beş ayrı gerçek coğrafi saha değildir. Oda şifresi tarayıcıda PBKDF2 ile kanal adına dönüştürülür; şifre sunucuya açık metin olarak gönderilmez veya bağlantıya eklenmez. Supabase Realtime kanalları teknik olarak herkese açıktır: doğru kanal adını bilen biri erişebilir. Şifresiz odada kodu bilen herkes bağlanabilir. Bu, sunucu tarafında doğrulanan bir hesap/oda erişim sistemi değildir; güçlü bir oda şifresi kullan. Pilot adları doğrulanmış kimlik değildir. Bu serbest uçuş sürümünde yetkili sunucu, çarpışma mutabakatı, yarış hakemliği ve hile önleme yoktur.
 
 ## Yerel geliştirme
 
 Node.js 22 ile `npm ci`, ardından `npm run dev`. `.env.example` dosyasını `.env.local` olarak kopyalayıp Supabase proje URL'si ve **publishable** anahtarını gir. Gizli/secret anahtarı tarayıcı koduna koyma. Testler: `npm test`; üretim derlemesi: `npm run build`.
 
-Kodun ana parçaları: [uçuş fiziği](src/flight.ts), [araç dinamikleri](src/vehicles.ts), [kumanda girişi](src/input.ts), [çok oyunculu iletişim](src/multiplayer.ts), [3B sahne](src/scene), [arayüz](src/main.tsx), [RLS şeması](supabase/migrations/0001_initial.sql). [Uçuş modelinin dayanakları ve sınırları](docs/flight-model.md) ayrıca belgelenmiştir.
+Kodun ana parçaları: [uçuş fiziği](src/flight.ts), [araç dinamikleri](src/vehicles.ts), [kumanda girişi](src/input.ts), [çok oyunculu iletişim](src/multiplayer.ts), [3B sahne](src/scene), [arayüz](src/main.tsx), [RLS şeması](supabase/migrations/0001_initial.sql). [Uçuş modelinin dayanakları ve sınırları](docs/flight-model.md) ile [adım adım geliştirme yol haritası](docs/development-roadmap.md) ayrıca belgelenmiştir.
 
 ## Geliştirme doğrulaması ve sınırlar
 

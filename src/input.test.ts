@@ -21,6 +21,9 @@ describe('RC input tuning', () => {
     expect(calibrateAxis(.12, range)).toBe(0)
     expect(calibrateAxis(.8, range)).toBe(1)
     expect(calibrateAxis(.4, { min: 0, center: 0, max: 0 })).toBe(.4)
+    expect(calibrateAxis(1, { min: 1, center: 0, max: -1 })).toBe(-1)
+    expect(calibrateAxis(0, { min: 1, center: 0, max: -1 })).toBe(0)
+    expect(calibrateAxis(-1, { min: 1, center: 0, max: -1 })).toBe(1)
   })
   it('applies a device calibration to assigned control axes', () => {
     const c = gamepadControls(pad([.46, .12, .8, 0]), defaultMapping, defaultTuning, {
