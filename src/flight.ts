@@ -1,4 +1,7 @@
 export type Controls = { throttle: number; aileron: number; elevator: number; rudder: number }
+export type FixedWingProfile = { thrust: number; lift: number; drag: number; stallSpeed: number; rollResponse: number }
+export const trainerProfile: FixedWingProfile = { thrust: 11.5, lift: .086, drag: 1, stallSpeed: 7.5, rollResponse: 1 }
+export const jetProfile: FixedWingProfile = { thrust: 19, lift: .052, drag: .82, stallSpeed: 13, rollResponse: 1.45 }
 export type FlightState = {
   position: [number, number, number]
   velocity: [number, number, number]
@@ -25,7 +28,7 @@ export const initialFlight = (): FlightState => ({
 
 // Fixed-step, air-relative RC trainer model. Coefficients need flight-test calibration.
 // World axes: +Y up, +Z runway forward, +X right. Wind is world-X velocity.
-export function stepFlight(state: FlightState, controls: Controls, dt: number, crosswind = 0): FlightState {
+export function stepFlight(state: FlightState, controls: Controls, dt: number, crosswind = 0, profile: FixedWingProfile = trainerProfile): FlightState {
   if (state.crashed || dt <= 0) return state
   const h = Math.min(dt, 1 / 30)
   const [x, y, z] = state.position
@@ -41,7 +44,7 @@ export function stepFlight(state: FlightState, controls: Controls, dt: number, c
   const flightPath = Math.atan2(vy, Math.max(horizontalSpeed, .01))
   const angleOfAttack = state.pitch - flightPath
   const authority = clamp(airspeed / 12, 0, 1.5)
-  const rollRate = state.rollRate + (aileron * 4.0 * authority - state.rollRate * 2.8 - state.roll * .32) * h
+  const rollRate = state.rollRate + (aileron * 4.0 * profile.rollResponse * authority - state.rollRate * 2.8 - state.roll * .32) * h
   const pitchRate = state.pitchRate + (elevator * 2.3 * authority - state.pitchRate * 2.2 - state.pitch * .75) * h
   const roll = clamp(state.roll + rollRate * h, -1.4, 1.4)
   const pitch = clamp(state.pitch + pitchRate * h, -.7, .7)
@@ -52,11 +55,11 @@ export function stepFlight(state: FlightState, controls: Controls, dt: number, c
   const sideX = forwardZ, sideZ = -forwardX
   const forwardAir = airX * forwardX + vz * forwardZ
   const sideAir = airX * sideX + vz * sideZ
-  const stalled = !ground && (airspeed < 7.5 || Math.abs(angleOfAttack) > .38)
+  const stalled = !ground && (airspeed < profile.stallSpeed || Math.abs(angleOfAttack) > .38)
   const cl = stalled ? clamp(.25 - (Math.abs(angleOfAttack) - .38) * .45, .08, .25) : clamp(.34 + angleOfAttack * 1.5, -.4, 1.15)
-  const lift = airspeed * airspeed * .086 * cl
-  const drag = airspeed * (.035 + airspeed * (.012 + .025 * cl * cl))
-  const thrust = throttle * 11.5
+  const lift = airspeed * airspeed * profile.lift * cl
+  const drag = airspeed * (.035 + airspeed * (.012 + .025 * cl * cl)) * profile.drag
+  const thrust = throttle * profile.thrust
   const nextForward = Math.max(0, forwardAir + (thrust - drag - GRAVITY * Math.sin(pitch)) * h)
   const nextSide = ground ? sideAir * Math.max(0, 1 - h * 8) : sideAir * Math.max(0, 1 - h * (1.1 + airspeed * .12))
   const nextVx = forwardX * nextForward + sideX * nextSide + (ground ? 0 : crosswind)

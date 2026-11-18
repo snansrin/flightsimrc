@@ -1,6 +1,6 @@
 # FlightSimRC
 
-Tarayıcıda RC uçuş eğitimi için geliştirilen prototip. React, TypeScript ve React Three Fiber kullanır. 1,5 m sınıfı yüksek kanatlı trainer modeli, pist çevresi, beş hava sahası teması, klavye/Gamepad girişi, eksen eşleme, HUD, takip/pilot kamerası, duraklatma ve sıfırlama içerir.
+Tarayıcıda RC uçuş eğitimi için geliştirilen prototip. React, TypeScript ve React Three Fiber kullanır. Pervaneli trainer, EDF jet, dört rotorlu drone ve RC helikopter için seçilebilir özgün sahne modelleri ve ayrı eğitim dinamikleri; pist çevresi, beş hava sahası teması, isteğe bağlı sentezlenmiş motor sesi, klavye/Gamepad girişi, eksen eşleme, HUD, takip/pilot kamerası, duraklatma ve sıfırlama içerir.
 
 ## Yerel çalıştırma
 
@@ -9,8 +9,11 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 ## Mimari ve mevcut sınırlar
 
 - `src/flight.ts`: 60 Hz sabit adımlı trainer dinamiği; hava hızına bağlı kaldırma/sürükleme, yan rüzgâr, stall, açısal hız, yatışa bağlı dönüş, yan kayma ve yer teması. Hız vektörü dönüşte aniden döndürülmez. Katsayılar uçuş testiyle doğrulanmadı; tam 6DoF fizik iddiası yoktur.
+- `src/vehicles.ts`: jet için farklı itki/kaldırma/stall profili; drone ve helikopter için ayrı, stabilize edilmiş hover ve yönelim tepkisi. Bunlar uçuş eğitimi prototipleridir; gerçek rotor, EDF, motor veya ESC performansıyla kalibre edilmemiştir.
+- `src/audio.ts`: kullanıcı ses düğmesine bastığında başlayan Web Audio motor/rotor/EDF sentezi. Sesler gerçek motor kayıtları veya akustik ölçüm değildir.
 - `src/input.ts`: Gamepad kanal eşlemesi, kanal tersleme, ölü bölge ve expo. Ayarlar tarayıcıda saklanır; ayar paneli ham eksen hareketini gösterir. Min/merkez/max kalibrasyon sihirbazı ve cihaz profilleri sonraki aşamadır.
 - `src/scene/Trainer.tsx`: özgün kodla oluşturulmuş trainer geometrisi, kanat oranları, iniş takımı ve hareketli kontrol yüzeyleri. [Apprentice STS kılavuzundaki](https://www.horizonhobby.com/on/demandware.static/Sites-horizon-us-Site/Sites-horizon-master/default/Manuals/EFL3700-Manual-EN.pdf) 1500 mm kanat açıklığı / 1080 mm gövde uzunluğu sınıfı referans alındı; marka modeli veya çizimi kopyalanmadı.
+- `src/scene/Vehicles.tsx`: özgün kodla oluşturulmuş quad, helikopter ve EDF jet görselleri; hareketli rotorlar. Ayrıntılı lisanslı 3D modeller ve gerçek materyal/livery çalışması sonraki aşamadır.
 - `src/scene/Airfield.tsx`: dokulu pist, hangar, rüzgâr tulumu, ağaçlar, ufuk tepeleri ve beş renk/rüzgâr teması. Beş saha henüz ayrı coğrafi veriler veya gerçek havaalanları değildir.
 - `src/main.tsx`: kamera, hava hızı/irtifa/yatış/burun açısı HUD'u, stall uyarısı, tam ekran ve kullanıcı arayüzü. Pilot kamerası sabit RC pilot görüşü, takip kamerası uçuşu öğrenme görüşü sağlar.
 - `supabase/migrations`: ileride giriş ve eğitim kaydı için RLS korumalı şema. Canlı Supabase projesine uygulanmadı; uygulama henüz giriş veya uçuş kaydı yapmaz.
@@ -19,7 +22,7 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 
 1. Trainer aerodinamiği ve çarpışmayı ölçümlerle doğrulama; JSBSim gibi referans FDM ile karşılaştırma, rüzgâr türbülansı, hasar ve uçuş tekrarı. [JSBSim kuvvet/moment yaklaşımı](https://jsbsim-team.github.io/jsbsim-reference-manual/user/concepts/forces-and-moments/) incelendi; bu prototipte henüz kullanılmıyor.
 2. Kalibrasyon sihirbazı: min/merkez/max örnekleme, USB kumanda profilleri ve kaydedilen ayarların cihaza göre ayrılması.
-3. Araç arayüzü ve ayrı dinamik modelleri: planör, akrobasi, multikopter, helikopter. Bu araçlar mevcut MVP'de uçulabilir değildir.
+3. Trainer, jet, drone ve helikopteri gerçek üretici/ölçüm verileriyle kalibre etme; helikopter collective/cyclic/rotor dinamiği, multikopter ESC/motor ve jet EDF gecikmesi. Planör ve akrobasi uçağı sonraki araçlardır.
 4. Beş ayrı arazi/pist, eğitim görevleri, ilerleme puanı ve erişilebilir arayüz.
 5. Supabase Auth ile hesap/ilerleme; şemanın gerçek projede kurulumu ve RLS testleri. Anahtarlar yalnızca ortam değişkenleri ile saklanmalı; service role anahtarı istemciye konmamalı.
 6. Colyseus ile ayrı otoriter oda sunucusu, durum senkronizasyonu, hız sınırları ve hile/uyumsuz sürüm önlemleri. Multiplayer henüz yoktur.
