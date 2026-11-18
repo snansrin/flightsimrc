@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
+import { useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
 
 export type AirfieldConfig = { name: string; subtitle: string; grass: string; sky: string; hills: string; wind: number; hangar: string }
 export const airfields: AirfieldConfig[] = [
@@ -10,34 +12,22 @@ export const airfields: AirfieldConfig[] = [
   { name: 'Kuzey Yaylası', subtitle: 'Serin hava · hafif rüzgâr', grass: '#819386', sky: '#c5d6dc', hills: '#6b7e7e', wind: -1.2, hangar: '#e7e7e0' },
 ]
 
-function noiseTexture(base: string, asphalt = false) {
-  const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = 256
-  const context = canvas.getContext('2d')!
-  context.fillStyle = base
-  context.fillRect(0, 0, 256, 256)
-  let seed = 7419
-  const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
-  for (let i = 0; i < (asphalt ? 5000 : 7800); i++) {
-    const light = random() > .5
-    context.fillStyle = asphalt ? (light ? '#ffffff0a' : '#00000012') : (light ? '#d7d6a916' : '#1d342017')
-    const x = random() * 256, y = random() * 256, size = random() * (asphalt ? 2 : 4) + .5
-    context.fillRect(x, y, size, size)
-  }
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(asphalt ? 2 : 80, asphalt ? 25 : 80)
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.anisotropy = 4
-  return texture
+function prepareTexture(texture: THREE.Texture, repeatX: number, repeatY: number, color = false) {
+  const copy = texture.clone()
+  copy.needsUpdate = true
+  if (color) copy.colorSpace = THREE.SRGBColorSpace
+  copy.anisotropy = 8
+  copy.wrapS = copy.wrapT = THREE.RepeatWrapping
+  copy.repeat.set(repeatX, repeatY)
+  return copy
 }
 
 function Hill({ position, scale, color }: { position: [number, number, number]; scale: [number, number, number]; color: string }) {
-  return <mesh position={position} scale={scale} rotation={[0, Math.PI / 4, 0]}><coneGeometry args={[1, 1.1, 5]} /><meshStandardMaterial color={color} roughness={1} /></mesh>
+  return <mesh position={position} scale={scale}><sphereGeometry args={[1, 24, 10]} /><meshStandardMaterial color={color} roughness={1} /></mesh>
 }
 
 function Tree({ x, z, size }: { x: number; z: number; size: number }) {
-  return <group position={[x, 0, z]}><mesh position={[0, size * .47, 0]} castShadow><cylinderGeometry args={[.025 * size, .045 * size, size * .75, 6]} /><meshStandardMaterial color="#665341" /></mesh><mesh position={[0, size * .93, 0]} scale={[.45 * size, .64 * size, .45 * size]} castShadow><icosahedronGeometry args={[1, 1]} /><meshStandardMaterial color="#44664d" roughness={1} flatShading /></mesh></group>
+  return <group position={[x, 0, z]}><mesh position={[0, size * .47, 0]} castShadow><cylinderGeometry args={[.025 * size, .045 * size, size * .75, 8]} /><meshStandardMaterial color="#665341" /></mesh><mesh position={[0, size * .93, 0]} scale={[.45 * size, .64 * size, .45 * size]} castShadow><sphereGeometry args={[1, 13, 9]} /><meshStandardMaterial color="#49684e" roughness={1} /></mesh><mesh position={[.12 * size, 1.1 * size, .05 * size]} scale={[.26 * size, .33 * size, .28 * size]}><sphereGeometry args={[1, 11, 7]} /><meshStandardMaterial color="#557654" roughness={1} /></mesh></group>
 }
 
 function Hangar({ color }: { color: string }) {
@@ -55,18 +45,23 @@ function Windsock() {
 }
 
 export function Airfield({ field }: { field: AirfieldConfig }) {
-  const grass = useMemo(() => noiseTexture(field.grass), [field.grass])
-  const asphalt = useMemo(() => noiseTexture('#565b59', true), [])
+  const maps = useLoader(THREE.TextureLoader, [
+    '/textures/grass001-color.jpg', '/textures/grass001-normalgl.jpg', '/textures/grass001-roughness.jpg',
+    '/textures/road001-color.jpg', '/textures/road001-normalgl.jpg', '/textures/road001-roughness.jpg',
+  ])
+  const skyTexture = useLoader(RGBELoader, '/textures/farm-field-sky-1k.hdr')
+  const [grassColor, grassNormal, grassRough, roadColor, roadNormal, roadRough] = useMemo(() => maps.map((map, i) => prepareTexture(map, i < 3 ? 200 : 1, i < 3 ? 200 : 20, i === 0 || i === 3)), [maps])
+  skyTexture.mapping = THREE.EquirectangularReflectionMapping
   const trees = useMemo(() => Array.from({ length: 75 }, (_, i) => {
     const a = i * 12.9898, x = Math.sin(a) * 48 + Math.cos(a * 2.3) * 23, z = Math.cos(a * .7) * 85
     return { x: x < 0 ? Math.min(x, -17) : Math.max(x, 17), z, size: 1.4 + (i % 5) * .25 }
   }), [])
   return <>
-    <color attach="background" args={[field.sky]} /><fog attach="fog" args={[field.sky, 95, 460]} />
+    <primitive attach="background" object={skyTexture} /><fog attach="fog" args={[field.sky, 160, 500]} />
     <hemisphereLight args={['#e7f4ff', '#57674d', 1.8]} />
     <directionalLight position={[25, 35, -35]} intensity={2.35} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-100} shadow-camera-right={100} shadow-camera-top={100} shadow-camera-bottom={-100} shadow-bias={-.0001} />
-    <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow><planeGeometry args={[2000, 2000]} /><meshStandardMaterial map={grass} color="#ffffff" roughness={1} /></mesh>
-    <mesh position={[0, .008, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow><planeGeometry args={[10, 190]} /><meshStandardMaterial map={asphalt} color="#ffffff" roughness={.95} /></mesh>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow><planeGeometry args={[2000, 2000]} /><meshStandardMaterial map={grassColor} normalMap={grassNormal} roughnessMap={grassRough} color={field.grass} roughness={1} /></mesh>
+    <mesh position={[0, .008, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow><planeGeometry args={[10, 190]} /><meshStandardMaterial map={roadColor} normalMap={roadNormal} roughnessMap={roadRough} color="#d3d3d0" roughness={.95} /></mesh>
     {[-1, 1].map(side => <group key={side}>
       <mesh position={[side * 5.05, .018, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.08, 185]} /><meshBasicMaterial color="#e5e1cd" /></mesh>
       {Array.from({ length: 13 }, (_, i) => <mesh key={i} position={[side * 4.2, .02, -80 + i * 13]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.65, 4]} /><meshBasicMaterial color="#e6e5da" /></mesh>)}
@@ -76,7 +71,6 @@ export function Airfield({ field }: { field: AirfieldConfig }) {
     {[-1, 1].flatMap(side => Array.from({ length: 4 }, (_, i) => <mesh key={`${side}-${i}`} position={[side * (1.2 + i * .7), .025, 78]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.42, 3.3]} /><meshBasicMaterial color="#f4eee0" /></mesh>))}
     <Hangar color={field.hangar} /><Windsock />
     {trees.map((tree, i) => <Tree key={i} {...tree} />)}
-    {Array.from({ length: 22 }, (_, i) => <Hill key={i} position={[(i - 11) * 38, 6, 300 + (i % 4) * 20]} scale={[33 + i % 5 * 7, 30 + i % 6 * 5, 25]} color={field.hills} />)}
-    {[[-45, 32, 170], [65, 38, 200], [15, 45, 280]].map(([x, y, z], i) => <group position={[x, y, z]} key={i}>{[-1, 0, 1].map(j => <mesh key={j} position={[j * 8, j % 2 * 2, 0]} scale={[12, 3, 4]}><sphereGeometry args={[1, 10, 6]} /><meshBasicMaterial color="#f8faf8" transparent opacity={.78} /></mesh>)}</group>)}
+    {Array.from({ length: 12 }, (_, i) => <Hill key={i} position={[(i - 6) * 95, -20, 360 + (i % 4) * 25]} scale={[83 + i % 5 * 8, 30 + i % 3 * 7, 60]} color={field.hills} />)}
   </>
 }
