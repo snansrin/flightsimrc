@@ -8,11 +8,11 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 
 ## Mimari ve mevcut sınırlar
 
-- `src/flight.ts`: 60 Hz sabit adımlı trainer dinamiği; hava hızına bağlı kaldırma/sürükleme, yan rüzgâr, stall, roll, pitch, yaw ve yer teması. Katsayılar uçuş testiyle doğrulanmadı; gerçek uçuş fiziği iddiası yoktur.
+- `src/flight.ts`: 60 Hz sabit adımlı trainer dinamiği; hava hızına bağlı kaldırma/sürükleme, yan rüzgâr, stall, açısal hız, yatışa bağlı dönüş, yan kayma ve yer teması. Hız vektörü dönüşte aniden döndürülmez. Katsayılar uçuş testiyle doğrulanmadı; tam 6DoF fizik iddiası yoktur.
 - `src/input.ts`: Gamepad kanal eşlemesi ve deadzone. Eşleme tarayıcıda saklanır. Kalibrasyon aralığı, kanal tersleme ve cihaz profilleri sonraki aşamadır.
 - `src/scene/Trainer.tsx`: özgün kodla oluşturulmuş trainer geometrisi, kanat oranları, iniş takımı ve hareketli kontrol yüzeyleri. [Apprentice STS kılavuzundaki](https://www.horizonhobby.com/on/demandware.static/Sites-horizon-us-Site/Sites-horizon-master/default/Manuals/EFL3700-Manual-EN.pdf) 1500 mm kanat açıklığı / 1080 mm gövde uzunluğu sınıfı referans alındı; marka modeli veya çizimi kopyalanmadı.
 - `src/scene/Airfield.tsx`: dokulu pist, hangar, rüzgâr tulumu, ağaçlar, ufuk tepeleri ve beş renk/rüzgâr teması. Beş saha henüz ayrı coğrafi veriler veya gerçek havaalanları değildir.
-- `src/main.tsx`: kamera, HUD ve kullanıcı arayüzü. Pilot kamerası sabit RC pilot görüşü, takip kamerası uçuşu öğrenme görüşü sağlar.
+- `src/main.tsx`: kamera, hava hızı/irtifa/yatış/burun açısı HUD'u, stall uyarısı, tam ekran ve kullanıcı arayüzü. Pilot kamerası sabit RC pilot görüşü, takip kamerası uçuşu öğrenme görüşü sağlar.
 - `supabase/migrations`: ileride giriş ve eğitim kaydı için RLS korumalı şema. Canlı Supabase projesine uygulanmadı; uygulama henüz giriş veya uçuş kaydı yapmaz.
 
 ## Sonraki uygulama aşamaları
@@ -27,7 +27,7 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 
 ## Lisans ve kaynaklar
 
-Bu depodaki özgün kod MIT lisanslıdır. Doğrudan kullanılan paketlerin lisansları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasında listelenir. Harita görüntüsü, harici 3D model, ses veya uzaktan yüklenen yazı tipi kullanılmaz. Yeni varlık eklenmeden önce kullanım ve dağıtım izni doğrulanmalıdır.
+Bu depodaki özgün kod MIT lisanslıdır. Paketler ve yerel CC0 sahne dokularının kaynakları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasında listelenir. Harici 3D model, ses veya uzaktan yüklenen yazı tipi kullanılmaz. Yeni varlık eklenmeden önce kullanım ve dağıtım izni doğrulanmalıdır.
 
 Ücretsiz Supabase planında aynı kuruluştaki iki etkin proje sınırı nedeniyle FlightSimRC veritabanı henüz oluşturulamadı. Mevcut DendroGeo projeleri etkilenmedi. Bu nedenle hesap, ilerleme ve multiplayer özellikleri etkin değildir.
 
