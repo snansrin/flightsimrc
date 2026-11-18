@@ -4,7 +4,7 @@ Tarayıcıda RC uçuş eğitimi için geliştirilen prototip. React, TypeScript 
 
 ## Yerel çalıştırma
 
-Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `npm test` ve `npm run build`. Gamepad cihazını USB ile bağlayıp tarayıcı sayfasına odaklanın. W/S gaz; oklar pitch/roll; A/D roll; Q/E rudder. Kumanda ayarlarından 0–7 eksenlerini eşleyin. Her cihazın throttle yönü farklı olabilir; mevcut prototipte −1 tam gazdır. Cihaz desteği tarayıcı ve işletim sistemine bağlıdır.
+Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Supabase bağlantısı için `.env.example` dosyasını `.env.local` olarak kopyalayıp yalnızca proje URL'sini ve publishable anahtarı girin. Doğrulama için `npm test` ve `npm run build`. Gamepad cihazını USB ile bağlayıp tarayıcı sayfasına odaklanın. W/S gaz; oklar pitch/roll; A/D roll; Q/E rudder. Kumanda ayarlarından 0–7 eksenlerini eşleyin. Her cihazın throttle yönü farklı olabilir; mevcut prototipte −1 tam gazdır. Cihaz desteği tarayıcı ve işletim sistemine bağlıdır.
 
 ## Mimari ve mevcut sınırlar
 
@@ -16,7 +16,8 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 - `src/scene/Vehicles.tsx`: özgün kodla oluşturulmuş quad, helikopter ve EDF jet görselleri; hareketli rotorlar. Ayrıntılı lisanslı 3D modeller ve gerçek materyal/livery çalışması sonraki aşamadır.
 - `src/scene/Airfield.tsx`: dokulu pist, hangar, rüzgâr tulumu, ağaçlar, ufuk tepeleri ve beş renk/rüzgâr teması. Beş saha henüz ayrı coğrafi veriler veya gerçek havaalanları değildir.
 - `src/main.tsx`: kamera, hava hızı/irtifa/yatış/burun açısı HUD'u, stall uyarısı, tam ekran ve kullanıcı arayüzü. Pilot kamerası sabit RC pilot görüşü, takip kamerası uçuşu öğrenme görüşü sağlar.
-- `supabase/migrations`: ileride giriş ve eğitim kaydı için RLS korumalı şema. Canlı Supabase projesine uygulanmadı; uygulama henüz giriş veya uçuş kaydı yapmaz.
+- `src/cloud.ts`: Supabase bağlantısı; istemcide yalnızca publishable anahtar kullanılır. E-posta bağlantısıyla giriş ve kullanıcının açıkça seçtiği uçuşu kaydetme akışı `src/main.tsx` içindedir. Uçuş sırasında sürekli veritabanı yazımı yapılmaz.
+- `supabase/migrations`: profil ve eğitim uçuşları için RLS korumalı şema. FlightSimRC projesinde tablolar ve politikalar kurulmuş, iki tabloda da RLS açık olduğu kontrol edilmiştir.
 
 ## Sonraki uygulama aşamaları
 
@@ -24,14 +25,14 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 2. Kalibrasyon sihirbazı: min/merkez/max örnekleme, USB kumanda profilleri ve kaydedilen ayarların cihaza göre ayrılması.
 3. Trainer, jet, drone ve helikopteri gerçek üretici/ölçüm verileriyle kalibre etme; helikopter collective/cyclic/rotor dinamiği, multikopter ESC/motor ve jet EDF gecikmesi. Planör ve akrobasi uçağı sonraki araçlardır.
 4. Beş ayrı arazi/pist, eğitim görevleri, ilerleme puanı ve erişilebilir arayüz.
-5. Supabase Auth ile hesap/ilerleme; şemanın gerçek projede kurulumu ve RLS testleri. Anahtarlar yalnızca ortam değişkenleri ile saklanmalı; service role anahtarı istemciye konmamalı.
+5. E-posta giriş akışını gerçek bir pilot hesabıyla uçtan uca doğrulama; görev ilerlemesi ve uçuş geçmişi ekranı. Service role veya secret anahtarı istemciye konmamalı.
 6. Colyseus ile ayrı otoriter oda sunucusu, durum senkronizasyonu, hız sınırları ve hile/uyumsuz sürüm önlemleri. Multiplayer henüz yoktur.
-7. HTTPS web hosting ve ayrı WebSocket hosting; dağıtım öncesi performans, mobil arayüz, gizlilik ve lisans kontrolleri.
+7. Ayrı WebSocket hosting; dağıtım sonrası performans, mobil arayüz, gizlilik ve lisans kontrolleri.
 
 ## Lisans ve kaynaklar
 
 Bu depodaki özgün kod MIT lisanslıdır. Paketler ve yerel CC0 sahne dokularının kaynakları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasında listelenir. Harici 3D model, ses veya uzaktan yüklenen yazı tipi kullanılmaz. Yeni varlık eklenmeden önce kullanım ve dağıtım izni doğrulanmalıdır.
 
-Ücretsiz Supabase planında aynı kuruluştaki iki etkin proje sınırı nedeniyle FlightSimRC veritabanı henüz oluşturulamadı. Mevcut DendroGeo projeleri etkilenmedi. Bu nedenle hesap, ilerleme ve multiplayer özellikleri etkin değildir.
+Ücretsiz Supabase projesi ayrı FlightSimRC kuruluşunda oluşturuldu. Proje bölgesi Singapur'dur; Türkiye kullanıcıları için gecikme ölçülmeli. GitHub Pages ana yayın adresi `https://snansrin.github.io/flightsimrc/` olacaktır. GitHub Actions için `VITE_SUPABASE_URL` ve `VITE_SUPABASE_PUBLISHABLE_KEY` adlı depo değişkenleri ayarlanmıştır. E-posta girişini kullanıcı hesabıyla canlıda denemeden tamamlanmış saymayın.
 
 Teknik kararlar için birincil kaynaklar: [Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [Colyseus](https://docs.colyseus.io/), [Three.js](https://threejs.org/), [React Three Fiber](https://r3f.docs.pmnd.rs/). Gerçek RC eğitiminin güvenlik ve yerel mevzuat koşulları ayrıca doğrulanmalıdır.

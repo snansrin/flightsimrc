@@ -45,11 +45,12 @@ function Windsock() {
 }
 
 export function Airfield({ field }: { field: AirfieldConfig }) {
+  const asset = (name: string) => `${import.meta.env.BASE_URL}textures/${name}`
   const maps = useLoader(THREE.TextureLoader, [
-    '/textures/grass001-color.jpg', '/textures/grass001-normalgl.jpg', '/textures/grass001-roughness.jpg',
-    '/textures/road001-color.jpg', '/textures/road001-normalgl.jpg', '/textures/road001-roughness.jpg',
+    asset('grass001-color.jpg'), asset('grass001-normalgl.jpg'), asset('grass001-roughness.jpg'),
+    asset('road001-color.jpg'), asset('road001-normalgl.jpg'), asset('road001-roughness.jpg'),
   ])
-  const skyTexture = useLoader(RGBELoader, '/textures/farm-field-sky-1k.hdr')
+  const skyTexture = useLoader(RGBELoader, asset('farm-field-sky-1k.hdr'))
   const [grassColor, grassNormal, grassRough, roadColor, roadNormal, roadRough] = useMemo(() => maps.map((map, i) => prepareTexture(map, i < 3 ? 200 : 1, i < 3 ? 200 : 20, i === 0 || i === 3)), [maps])
   skyTexture.mapping = THREE.EquirectangularReflectionMapping
   const trees = useMemo(() => Array.from({ length: 75 }, (_, i) => {

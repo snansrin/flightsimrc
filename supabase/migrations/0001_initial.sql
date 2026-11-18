@@ -7,6 +7,7 @@ create table if not exists public.training_flights (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   airfield text not null,
+  vehicle text not null default 'trainer' check (vehicle in ('trainer', 'drone', 'helicopter', 'jet')),
   duration_seconds integer not null check (duration_seconds between 0 and 86400),
   completed_at timestamptz not null default now()
 );
