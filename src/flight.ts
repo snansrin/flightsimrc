@@ -1,24 +1,64 @@
 export type Controls = { throttle: number; aileron: number; elevator: number; rudder: number }
-export type FlightState = { position: [number, number, number]; velocity: [number, number, number]; yaw: number; pitch: number; roll: number; crashed: boolean }
-export const initialFlight = (): FlightState => ({ position: [0, 1.3, 0], velocity: [0, 0, 0], yaw: 0, pitch: 0, roll: 0, crashed: false })
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
-// Fixed timestep trainer model. Axes: +z forward, +y up. SI units, simplified aerodynamic coefficients.
-export function stepFlight(s: FlightState, c: Controls, dt: number, wind = 0): FlightState {
-  if (s.crashed) return s
-  const [x, y, z] = s.position
-  const [vx, vy, vz] = s.velocity
-  const speed = Math.hypot(vx, vz)
-  const roll = clamp(s.roll + (c.aileron * 1.35 - s.roll * 1.1) * dt, -0.9, 0.9)
-  const pitch = clamp(s.pitch + (c.elevator * 0.9 - s.pitch * 0.6) * dt, -0.45, 0.55)
-  const yaw = s.yaw + (c.rudder * 0.45 + Math.sin(roll) * speed * 0.014) * dt
-  const drag = 0.028 * speed * speed + 0.3 * speed
-  const accel = c.throttle * 18 - drag
-  const forward = clamp(speed + accel * dt, 0, 38)
-  const lift = Math.max(0, speed - 7) ** 2 * 0.025 * Math.cos(roll)
-  const vertical = clamp(vy + (lift - 9.81 + Math.sin(pitch) * forward * 0.7 - vy * 0.7) * dt, -25, 25)
-  const nx = x + (Math.sin(yaw) * forward + wind) * dt
-  const nz = z + Math.cos(yaw) * forward * dt
-  const ny = y + vertical * dt
-  const crashed = ny < 1.1 && (vertical < -3 || Math.abs(roll) > 0.35 || Math.abs(pitch) > 0.3)
-  return { position: [nx, Math.max(1.1, ny), nz], velocity: [Math.sin(yaw) * forward, ny <= 1.1 ? 0 : vertical, Math.cos(yaw) * forward], yaw, pitch, roll, crashed }
+export type FlightState = {
+  position: [number, number, number]
+  velocity: [number, number, number]
+  yaw: number
+  pitch: number
+  roll: number
+  crashed: boolean
+  stalled: boolean
+}
+
+const GROUND_HEIGHT = .25
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+export const initialFlight = (): FlightState => ({
+  position: [0, GROUND_HEIGHT, -55], velocity: [0, 0, 0], yaw: 0, pitch: 0, roll: 0, crashed: false, stalled: false,
+})
+
+// A fixed-step, air-relative trainer approximation. Tuned for a 1.5 m RC high-wing model.
+// Coefficients are illustrative until validated against flight test data or a reference FDM.
+export function stepFlight(state: FlightState, controls: Controls, dt: number, crosswind = 0): FlightState {
+  if (state.crashed || dt <= 0) return state
+  const [x, y, z] = state.position
+  const [vx, vy, vz] = state.velocity
+  const c = {
+    throttle: clamp(controls.throttle, 0, 1),
+    aileron: clamp(controls.aileron, -1, 1),
+    elevator: clamp(controls.elevator, -1, 1),
+    rudder: clamp(controls.rudder, -1, 1),
+  }
+  const airX = vx - crosswind
+  const airspeed = Math.hypot(airX, vy, vz)
+  const ground = y <= GROUND_HEIGHT + .001
+  const controlAuthority = clamp(airspeed / 7, .12, 1)
+  const roll = clamp(state.roll + (c.aileron * 1.55 * controlAuthority - state.roll * .75) * dt, -1.2, 1.2)
+  const pitch = clamp(state.pitch + (c.elevator * .9 * controlAuthority - state.pitch * .55) * dt, -.55, .55)
+  const yaw = state.yaw + (c.rudder * .56 * controlAuthority + Math.sin(roll) * airspeed * .022) * dt
+  const forwardX = Math.sin(yaw)
+  const forwardZ = Math.cos(yaw)
+  const horizontalSpeed = Math.hypot(airX, vz)
+  const flightPathAngle = Math.atan2(vy, Math.max(horizontalSpeed, .01))
+  const angleOfAttack = pitch - flightPathAngle
+  const stalled = !ground && (airspeed < 8 || angleOfAttack > .42 && airspeed < 14)
+  const liftCoefficient = stalled ? .12 : clamp(.24 + angleOfAttack * 1.2, 0, 1.25)
+  const lift = airspeed * airspeed * .08 * liftCoefficient * Math.cos(roll)
+  const drag = airspeed * .055 + airspeed * airspeed * (.014 + Math.abs(angleOfAttack) * .009)
+  const thrust = c.throttle * 10.5
+  const forwardAcceleration = thrust - drag - Math.sin(pitch) * 9.81
+  const forwardSpeed = clamp(horizontalSpeed + forwardAcceleration * dt, 0, 34)
+  const nextVx = forwardX * forwardSpeed + (ground ? 0 : crosswind)
+  const nextVz = forwardZ * forwardSpeed
+  const verticalAcceleration = lift - 9.81 + Math.sin(pitch) * thrust - (vy - forwardSpeed * Math.sin(pitch)) * 1.45
+  const nextVy = clamp(vy + verticalAcceleration * dt, -30, 25)
+  const nextY = y + nextVy * dt
+  const impact = nextY <= GROUND_HEIGHT && !ground
+  const crashed = impact && (nextVy < -3.3 || Math.abs(roll) > .52 || Math.abs(pitch) > .42)
+  const onGround = nextY <= GROUND_HEIGHT
+  return {
+    position: [x + nextVx * dt, Math.max(GROUND_HEIGHT, nextY), z + nextVz * dt],
+    velocity: [nextVx, onGround ? 0 : nextVy, nextVz], yaw,
+    pitch: onGround ? clamp(pitch, -.1, .15) : pitch,
+    roll: onGround ? clamp(roll, -.14, .14) : roll,
+    crashed, stalled,
+  }
 }

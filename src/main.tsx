@@ -4,41 +4,30 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { initialFlight, stepFlight, type Controls, type FlightState } from './flight'
 import { defaultMapping, gamepadControls, type Mapping, type AxisKey } from './input'
+import { Trainer } from './scene/Trainer'
+import { Airfield, airfields } from './scene/Airfield'
 import './style.css'
 
-const airfields = [
-  { name: 'Anadolu Eğitim Pisti', terrain: '#647b5b', sky: '#b8d5df', wind: 0 },
-  { name: 'Ege Kıyı Pisti', terrain: '#a7a179', sky: '#a8cfdf', wind: 1.5 },
-  { name: 'Alp Vadisi', terrain: '#69735c', sky: '#a9c5d5', wind: -2 },
-  { name: 'Çöl Meydanı', terrain: '#c4a77a', sky: '#c6dce5', wind: 2.5 },
-  { name: 'Kuzey Yaylası', terrain: '#7c897f', sky: '#c8d4da', wind: -1.2 },
-]
 const zero: Controls = { throttle: 0, aileron: 0, elevator: 0, rudder: 0 }
-function Aircraft({ state }: { state: React.MutableRefObject<FlightState> }) {
+function Aircraft({ state, controls, cameraMode }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; cameraMode: 'chase' | 'pilot' }) {
   const ref = useRef<THREE.Group>(null)
   useFrame(({ camera }) => {
     const s = state.current
     if (!ref.current) return
     ref.current.position.set(...s.position)
     ref.current.rotation.set(-s.pitch, s.yaw, -s.roll, 'YXZ')
-    const desired = new THREE.Vector3(s.position[0] - Math.sin(s.yaw) * 15, s.position[1] + 6, s.position[2] - Math.cos(s.yaw) * 15)
-    camera.position.lerp(desired, 0.055)
-    camera.lookAt(s.position[0], s.position[1] + 1, s.position[2] + 5)
+    const desired = cameraMode === 'pilot'
+      ? new THREE.Vector3(12, 1.8, -55)
+      : new THREE.Vector3(s.position[0] - Math.sin(s.yaw) * 3.7, s.position[1] + 1.25, s.position[2] - Math.cos(s.yaw) * 3.7)
+    camera.position.lerp(desired, cameraMode === 'pilot' ? .1 : .07)
+    camera.lookAt(s.position[0], s.position[1] + (cameraMode === 'pilot' ? 0 : .15), s.position[2] + (cameraMode === 'pilot' ? 0 : 2))
   })
-  return <group ref={ref}>
-    <mesh><boxGeometry args={[0.8, 0.55, 4]} /><meshStandardMaterial color="#f2eee1" /></mesh>
-    <mesh position={[0, 0.12, 0.1]}><boxGeometry args={[8, 0.12, 1.15]} /><meshStandardMaterial color="#ea743c" /></mesh>
-    <mesh position={[0, 0.45, -1.6]}><boxGeometry args={[3, 0.1, 0.5]} /><meshStandardMaterial color="#e9e8db" /></mesh>
-    <mesh position={[0, 0.8, -1.8]}><boxGeometry args={[0.12, 0.9, 0.55]} /><meshStandardMaterial color="#ea743c" /></mesh>
-    <mesh position={[0, -0.45, 0.45]}><boxGeometry args={[0.1, 1.6, 0.1]} /><meshStandardMaterial color="#222c30" /></mesh>
-  </group>
+  return <group ref={ref}><Trainer controls={controls} /></group>
 }
-function Scene({ state, field }: { state: React.MutableRefObject<FlightState>; field: typeof airfields[number] }) {
-  return <Canvas camera={{ position: [0, 6, -15], fov: 65 }} shadows><color attach="background" args={[field.sky]} /><fog attach="fog" args={[field.sky, 100, 550]} /><hemisphereLight intensity={2} /><directionalLight position={[20, 50, 15]} intensity={2.2} castShadow />
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow><planeGeometry args={[3000, 3000]} /><meshStandardMaterial color={field.terrain} /></mesh>
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 55]}><planeGeometry args={[12, 230]} /><meshStandardMaterial color="#383e42" /></mesh>
-    {Array.from({ length: 10 }, (_, i) => <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, -42 + i * 20]}><planeGeometry args={[0.3, 8]} /><meshBasicMaterial color="#f2eadb" /></mesh>)}
-    <Aircraft state={state} /></Canvas>
+function Scene({ state, controls, field, cameraMode }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; field: typeof airfields[number]; cameraMode: 'chase' | 'pilot' }) {
+  return <Canvas camera={{ position: [0, 1.4, -4], fov: 58, near: .025, far: 800 }} dpr={[1, 1.6]} shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>
+    <Airfield field={field} /><Aircraft state={state} controls={controls} cameraMode={cameraMode} />
+  </Canvas>
 }
 function App() {
   const flight = useRef(initialFlight())
@@ -49,6 +38,7 @@ function App() {
   const [mapping, setMapping] = useState<Mapping>(() => { try { return { ...defaultMapping, ...JSON.parse(localStorage.getItem('flight-mapping') || '{}') } } catch { return defaultMapping } })
   const [padName, setPadName] = useState('Klavye')
   const [paused, setPaused] = useState(false)
+  const [cameraMode, setCameraMode] = useState<'chase' | 'pilot'>('chase')
   const [showSettings, setShowSettings] = useState(false)
   useEffect(() => {
     const down = (e: KeyboardEvent) => { if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault(); keys.current.add(e.code) }
@@ -78,8 +68,8 @@ function App() {
   const speed = Math.hypot(hud.velocity[0], hud.velocity[2])
   return <main><header><div className="brand"><span className="mark">✦</span><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● SOLO EĞİTİM</span><button onClick={() => setShowSettings(!showSettings)}>⚙ Kumanda ayarları</button></nav></header>
     <section className="intro"><div><p className="eyebrow">RC PİLOTLUĞA İLK ADIM</p><h1>Uçuşu hisset.<br/><em>Kontrolü öğren.</em></h1><p>Trainer uçağıyla kalkış, dönüş ve iniş çalış. Gerçek kumandanı bağla veya klavyeyle hemen başla.</p></div><div className="lesson"><span>01 / TEMEL EĞİTİM</span><strong>Kalkış ve düz uçuş</strong><p>Gazı artır, pist boyunca hızlan ve irtifa kazan. Sert inişte uçağı sıfırla.</p></div></section>
-    <section className="sim"><div className="simtop"><div><span className="red-dot">●</span> CANLI SİMÜLATÖR <span className="sep">/</span> TRAINER 01</div><div>{padName.slice(0, 42)} bağlı</div></div><div className="viewport"><Scene state={flight} field={airfields[fieldIndex]} />{hud.crashed && <div className="crash"><strong>Sert iniş</strong><span>Yeni uçuş için sıfırla</span><button onClick={reset}>Yeniden başla</button></div>}<div className="crosshair">+</div><div className="hud"><div><small>HIZ</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div><div><small>İRTİFA</small><strong>{Math.round(Math.max(0, hud.position[1] - 1.1))}</strong><span>m</span></div><div><small>GAZ</small><strong>{Math.round(controls.current.throttle * 100)}</strong><span>%</span></div><div><small>BAŞ</small><strong>{Math.round((hud.yaw * 180 / Math.PI + 3600) % 360)}</strong><span>°</span></div></div></div><div className="toolbar"><label>UÇUŞ ALANI <select value={fieldIndex} onChange={e => { setFieldIndex(Number(e.target.value)); reset() }}>{airfields.map((f, i) => <option value={i} key={f.name}>{f.name}</option>)}</select></label><div><button onClick={() => setPaused(!paused)}>{paused ? '▶ Devam' : 'Ⅱ Duraklat'}</button><button onClick={reset}>↺ Uçağı sıfırla</button></div></div></section>
-    <section className="info"><div><span>01</span><strong>KLAVYE</strong><p>W / S gaz · Oklar veya A / D yön · Q / E dümen</p></div><div><span>02</span><strong>RC KUMANDA / JOYSTICK</strong><p>USB cihazını bağla. Gamepad API üzerinden otomatik algılanır; kanal eşlemesini ayarlardan değiştir.</p></div><div><span>03</span><strong>UÇUŞ MODELİ</strong><p>60 Hz adımlı temel 6DoF yaklaşımı. Eğitim prototipi; gerçek uçuş öncesi fiziksel eğitim yerine geçmez.</p></div></section>
+    <section className="sim"><div className="simtop"><div><span className="red-dot">●</span> CANLI SİMÜLATÖR <span className="sep">/</span> TRAINER 01</div><div>{padName.slice(0, 42)} bağlı</div></div><div className="viewport"><Scene state={flight} controls={controls} field={airfields[fieldIndex]} cameraMode={cameraMode} />{hud.crashed && <div className="crash"><strong>Sert iniş</strong><span>Yeni uçuş için sıfırla</span><button onClick={reset}>Yeniden başla</button></div>}<div className="crosshair">+</div><div className="scene-label"><strong>{airfields[fieldIndex].name}</strong><span>{airfields[fieldIndex].subtitle} · {Math.abs(airfields[fieldIndex].wind).toFixed(1)} m/s yan rüzgâr</span></div><div className="hud"><div><small>HIZ</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div><div><small>İRTİFA</small><strong>{Math.round(Math.max(0, hud.position[1] - .25))}</strong><span>m</span></div><div><small>GAZ</small><strong>{Math.round(controls.current.throttle * 100)}</strong><span>%</span></div><div><small>BAŞ</small><strong>{Math.round((hud.yaw * 180 / Math.PI + 3600) % 360)}</strong><span>°</span></div></div></div><div className="toolbar"><label>UÇUŞ ALANI <select value={fieldIndex} onChange={e => { setFieldIndex(Number(e.target.value)); reset() }}>{airfields.map((f, i) => <option value={i} key={f.name}>{f.name}</option>)}</select></label><div><button onClick={() => setCameraMode(cameraMode === 'chase' ? 'pilot' : 'chase')}>{cameraMode === 'chase' ? '◉ Pilot görüşü' : '◉ Takip görüşü'}</button><button onClick={() => setPaused(!paused)}>{paused ? '▶ Devam' : 'Ⅱ Duraklat'}</button><button onClick={reset}>↺ Uçağı sıfırla</button></div></div></section>
+    <section className="info"><div><span>01</span><strong>KLAVYE</strong><p>W / S gaz · Oklar pitch ve roll · A / D roll · Q / E dümen. Kalkış için hızlandıktan sonra yukarı ok.</p></div><div><span>02</span><strong>RC KUMANDA / JOYSTICK</strong><p>USB cihazını bağla. Gamepad API üzerinden otomatik algılanır; kanal eşlemesini ayarlardan değiştir.</p></div><div><span>03</span><strong>TRAINER UÇUŞ MODELİ</strong><p>Hava hızına bağlı kaldırma, sürükleme, yan rüzgâr ve stall davranışı. Pilot görüşüyle gerçek RC perspektifini dene; model hâlâ test verileriyle kalibre edilmeli.</p></div></section>
     {showSettings && <div className="overlay" onClick={() => setShowSettings(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowSettings(false)}>✕</button><p className="eyebrow">GİRİŞ AYARLARI</p><h2>Kumanda kanalları</h2><p>Bağlı cihaz: {padName}. Eksen numaraları cihazına göre değişebilir.</p>{(Object.keys(mapping) as AxisKey[]).map(key => <label className="axis" key={key}>{key}<select value={mapping[key]} onChange={e => updateMapping(key, Number(e.target.value))}>{Array.from({ length: 8 }, (_, i) => <option value={i} key={i}>Eksen {i}</option>)}</select></label>)}<p className="muted">Eşleme bu tarayıcıda saklanır. Gaz ekseni −1 = tam gaz kabul edilir.</p></aside></div>}
   </main>
 }

@@ -1,6 +1,6 @@
 # FlightSimRC
 
-Tarayıcıda RC uçuş eğitimi için geliştirilen ilk çalışan prototip. React, TypeScript ve React Three Fiber kullanır. Trainer uçak, beş görsel uçuş alanı, klavye/Gamepad girişi, eksen eşleme, HUD, duraklatma ve sıfırlama içerir.
+Tarayıcıda RC uçuş eğitimi için geliştirilen prototip. React, TypeScript ve React Three Fiber kullanır. 1,5 m sınıfı yüksek kanatlı trainer modeli, pist çevresi, beş hava sahası teması, klavye/Gamepad girişi, eksen eşleme, HUD, takip/pilot kamerası, duraklatma ve sıfırlama içerir.
 
 ## Yerel çalıştırma
 
@@ -8,14 +8,16 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 
 ## Mimari ve mevcut sınırlar
 
-- `src/flight.ts`: 60 Hz sabit adımlı trainer dinamiği; hız, kaldırma, sürükleme, roll, pitch, yaw, yer teması. Bu, eğitime dönük basitleştirilmiş bir modeldir; doğrulanmış gerçek uçuş fiziği değildir.
+- `src/flight.ts`: 60 Hz sabit adımlı trainer dinamiği; hava hızına bağlı kaldırma/sürükleme, yan rüzgâr, stall, roll, pitch, yaw ve yer teması. Katsayılar uçuş testiyle doğrulanmadı; gerçek uçuş fiziği iddiası yoktur.
 - `src/input.ts`: Gamepad kanal eşlemesi ve deadzone. Eşleme tarayıcıda saklanır. Kalibrasyon aralığı, kanal tersleme ve cihaz profilleri sonraki aşamadır.
-- `src/main.tsx`: sahne, kamera, HUD ve kullanıcı arayüzü. Beş alan şu an farklı renk/rüzgâr konseptidir; gerçek arazi veya pist yerleşimi değildir.
+- `src/scene/Trainer.tsx`: özgün kodla oluşturulmuş trainer geometrisi, kanat oranları, iniş takımı ve hareketli kontrol yüzeyleri. [Apprentice STS kılavuzundaki](https://www.horizonhobby.com/on/demandware.static/Sites-horizon-us-Site/Sites-horizon-master/default/Manuals/EFL3700-Manual-EN.pdf) 1500 mm kanat açıklığı / 1080 mm gövde uzunluğu sınıfı referans alındı; marka modeli veya çizimi kopyalanmadı.
+- `src/scene/Airfield.tsx`: dokulu pist, hangar, rüzgâr tulumu, ağaçlar, ufuk tepeleri ve beş renk/rüzgâr teması. Beş saha henüz ayrı coğrafi veriler veya gerçek havaalanları değildir.
+- `src/main.tsx`: kamera, HUD ve kullanıcı arayüzü. Pilot kamerası sabit RC pilot görüşü, takip kamerası uçuşu öğrenme görüşü sağlar.
 - `supabase/migrations`: ileride giriş ve eğitim kaydı için RLS korumalı şema. Canlı Supabase projesine uygulanmadı; uygulama henüz giriş veya uçuş kaydı yapmaz.
 
 ## Sonraki uygulama aşamaları
 
-1. Trainer aerodinamiği ve çarpışmayı ölçümlerle doğrulama; iniş takımı, stall, kumanda yüzeyleri, rüzgâr türbülansı, uçuş tekrarı.
+1. Trainer aerodinamiği ve çarpışmayı ölçümlerle doğrulama; JSBSim gibi referans FDM ile karşılaştırma, rüzgâr türbülansı, hasar ve uçuş tekrarı. [JSBSim kuvvet/moment yaklaşımı](https://jsbsim-team.github.io/jsbsim-reference-manual/user/concepts/forces-and-moments/) incelendi; bu prototipte henüz kullanılmıyor.
 2. Gerçek kalibrasyon sihirbazı: min/merkez/max, tersleme, expo, deadzone, USB kumanda profilleri ve cihaz test ekranı.
 3. Araç arayüzü ve ayrı dinamik modelleri: planör, akrobasi, multikopter, helikopter. Bu araçlar mevcut MVP'de uçulabilir değildir.
 4. Beş ayrı arazi/pist, eğitim görevleri, ilerleme puanı ve erişilebilir arayüz.
