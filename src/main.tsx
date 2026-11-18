@@ -6,7 +6,8 @@ import { type Controls, type FlightState } from './flight'
 import { calibrateAxis, defaultMapping, defaultTuning, defaultChannels, deviceSources, detectMovedSource, gamepadControls, normalizeSource, readSource, type Mapping, type InputSource, type AxisKey, type InputTuning, type Calibration } from './input'
 import { VehicleModel } from './scene/Vehicles'
 import { Airfield, airfields } from './scene/Airfield'
-import { initialVehicle, stepVehicle, vehicles, type VehicleKind } from './vehicles'
+import { vehicles, type VehicleKind } from './vehicles'
+import { applyDisplayControls, newFlightSimulation, physicsAircraft, physicsFieldId, toDisplayFlight } from './sim/bridge'
 import { EngineAudio } from './audio'
 import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
 import { RemoteAircraft } from './scene/RemoteAircraft'
@@ -76,12 +77,13 @@ function ControllerDiscovery({ pads, selected, onSelect, onMessage }: {
 function App() {
   const simRef = useRef<HTMLElement>(null)
   const [vehicle, setVehicle] = useState<VehicleKind>('trainer')
-  const flight = useRef(initialVehicle('trainer'))
+  const simulation = useRef(newFlightSimulation('trainer'))
+  const flight = useRef(toDisplayFlight(simulation.current))
   const sound = useRef<EngineAudio | null>(null)
   const [soundOn, setSoundOn] = useState(false)
   const controls = useRef<Controls>({ ...zero })
   const keys = useRef(new Set<string>())
-  const [hud, setHud] = useState(initialVehicle('trainer'))
+  const [hud, setHud] = useState(toDisplayFlight(simulation.current))
   const [fieldIndex, setFieldIndex] = useState(0)
   const [mapping, setMapping] = useState<Mapping>(defaultMapping)
   const [auxiliary, setAuxiliary] = useState<InputSource[]>([])
@@ -131,7 +133,7 @@ function App() {
       onStatus: (status, message) => { setRoomStatus(status); if (message) setRoomMessage(message) },
       onPeers: (remote, count) => { setPeers(remote); setRoomCount(count) },
       onRoster: setRoomPilots,
-      onField: field => { if (field !== roomFlight.current.fieldIndex) { setFieldIndex(field); flight.current = initialVehicle(roomFlight.current.vehicle); flightSeconds.current = 0 } },
+      onField: field => { if (field !== roomFlight.current.fieldIndex) { setFieldIndex(field); simulation.current.reset({ aircraft: physicsAircraft[roomFlight.current.vehicle], field: physicsFieldId(field) }); flight.current = toDisplayFlight(simulation.current); flightSeconds.current = 0 } },
     })
     return disconnect
   }, [roomCode, roomChannel, roomIsHost])
@@ -220,14 +222,23 @@ function App() {
         const response = 1 - Math.exp(-delta * 7)
         controls.current = { throttle: Math.max(0, Math.min(1, controls.current.throttle + ((k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0)) * delta * .45)), aileron: controls.current.aileron + (target.aileron - controls.current.aileron) * response, elevator: controls.current.elevator + (target.elevator - controls.current.elevator) * response, rudder: controls.current.rudder + (target.rudder - controls.current.rudder) * response }
       }
-      if (!paused) { accumulator += delta; while (accumulator >= 1 / 60) { flight.current = stepVehicle(vehicle, flight.current, controls.current, 1 / 60, airfields[fieldIndex].wind); if (!flight.current.crashed) flightSeconds.current += 1 / 60; accumulator -= 1 / 60 } }
+      if (!paused) {
+        accumulator += delta
+        while (accumulator >= 1 / 60) {
+          applyDisplayControls(simulation.current, controls.current)
+          simulation.current.update(1 / 60)
+          flight.current = toDisplayFlight(simulation.current)
+          if (!flight.current.crashed) flightSeconds.current += 1 / 60
+          accumulator -= 1 / 60
+        }
+      }
       sound.current?.update(vehicle, controls.current.throttle, flight.current.airspeed, paused || flight.current.crashed)
       if (now - display > 100) { setHud({ ...flight.current }); setPadAxes(pad ? [...pad.axes] : []); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame)
   }, [calibration, controllerArmed, fieldIndex, mapping, selectedPadIndex, tuning, paused, vehicle])
-  const reset = (kind: VehicleKind = vehicle) => { flight.current = initialVehicle(kind); flightSeconds.current = 0; controls.current = { ...zero }; setHud(flight.current) }
+  const reset = (kind: VehicleKind = vehicle, nextField = fieldIndex) => { simulation.current.reset({ aircraft: physicsAircraft[kind], field: physicsFieldId(nextField) }); flight.current = toDisplayFlight(simulation.current); flightSeconds.current = 0; controls.current = { ...zero }; setHud({ ...flight.current }) }
   const toggleSound = async () => { if (sound.current) { await sound.current.close(); sound.current = null; setSoundOn(false) } else { sound.current = new EngineAudio(); await sound.current.resume(); setSoundOn(true) } }
   const saveDeviceSetting = (name: string, value: unknown) => { if (deviceProfileId.current) localStorage.setItem(`flight-device:${deviceProfileId.current}:${name}`, JSON.stringify(value)) }
   const updateMapping = (key: AxisKey, source: InputSource) => {
@@ -328,8 +339,8 @@ function App() {
   const pitch = Math.round(hud.pitch * 180 / Math.PI)
   return <main><header><div className="brand"><span className="mark">✦</span><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
     <section className="intro"><div><p className="eyebrow">RC PİLOTLUĞA İLK ADIM</p><h1>Uçuşu hisset.<br/><em>Kontrolü öğren.</em></h1><p>Pervaneli trainer, drone, helikopter veya RC jet seç. Kumandanı bağla ya da klavyeyle eğitime başla.</p></div><div className="lesson"><span>01 / TEMEL EĞİTİM</span><strong>{vehicles.find(item => item.id === vehicle)?.className}</strong><p>{vehicles.find(item => item.id === vehicle)?.lesson}. Gazı dikkatle artır; sert inişte aracı sıfırla.</p></div></section>
-    <section className="sim" ref={simRef}><div className="simtop"><div><span className="red-dot">●</span> CANLI SİMÜLATÖR <span className="sep">/</span> {vehicles.find(item => item.id === vehicle)?.name.toUpperCase()}</div><div>{padName.slice(0, 42)} bağlı</div></div><div className="viewport"><Scene state={flight} controls={controls} field={airfields[fieldIndex]} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle} peers={peers} />{hud.crashed && <div className="crash"><strong>Sert iniş</strong><span>Yeni uçuş için sıfırla</span><button onClick={() => reset()}>Yeniden başla</button></div>}<div className="crosshair">+</div><div className="scene-label"><strong>{airfields[fieldIndex].name}</strong><span>{airfields[fieldIndex].subtitle} · {Math.abs(airfields[fieldIndex].wind).toFixed(1)} m/s yan rüzgâr</span></div>{hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}<div className="attitude"><span>YATIŞ {bank}°</span><span>BURUN {pitch}°</span><span>ALFA {Math.round(hud.angleOfAttack * 180 / Math.PI)}°</span></div><div className="hud"><div><small>HAVA HIZI</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div><div><small>İRTİFA</small><strong>{Math.round(Math.max(0, hud.position[1] - .25))}</strong><span>m</span></div><div><small>GAZ</small><strong>{Math.round(controls.current.throttle * 100)}</strong><span>%</span></div><div><small>BAŞ</small><strong>{Math.round((hud.yaw * 180 / Math.PI + 3600) % 360)}</strong><span>°</span></div></div></div><div className="toolbar"><label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value as VehicleKind; setVehicle(next); reset(next) }}>{vehicles.map(item => <option key={item.id} value={item.id}>{item.name} · {item.className}</option>)}</select></label><label>UÇUŞ ALANI <select value={fieldIndex} disabled={Boolean(roomCode)} onChange={e => { setFieldIndex(Number(e.target.value)); reset() }}>{airfields.map((f, i) => <option value={i} key={f.name}>{f.name}</option>)}</select></label><div><label className="camera-choice">GÖRÜŞ <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}><option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option></select></label><label className="camera-zoom">YAKINLIK <input type="range" min="0.6" max="2.4" step="0.1" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label><button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>⛶ Tam ekran</button><button onClick={() => void toggleSound()}>{soundOn ? '◖ Sesi kapat' : '◖ Sesi aç'}</button><button onClick={() => setPaused(!paused)}>{paused ? '▶ Devam' : 'Ⅱ Duraklat'}</button><button onClick={() => reset()}>↺ Uçağı sıfırla</button></div></div></section>
-    <section className="info"><div><span>01</span><strong>KLAVYE</strong><p>W / S gaz · Oklar pitch ve roll · A / D roll · Q / E dümen. Drone ve helikopterde yaklaşık %50 gaz hover bölgesidir.</p></div><div><span>02</span><strong>RC KUMANDA / JOYSTICK</strong><p>USB cihazını bağla. Gamepad API üzerinden otomatik algılanır; kanal eşlemesini ayarlardan değiştir.</p></div><div><span>03</span><strong>ARAÇ DİNAMİĞİ</strong><p>Trainer ve jet için ayrı sabit kanat profilleri; drone ve helikopter için stabilize edilmiş rotor tepkisi. Modeller uçuş verileriyle kalibre edilmeli.</p></div></section>
+    <section className="sim" ref={simRef}><div className="simtop"><div><span className="red-dot">●</span> CANLI SİMÜLATÖR <span className="sep">/</span> {vehicles.find(item => item.id === vehicle)?.name.toUpperCase()}</div><div>{padName.slice(0, 42)} bağlı</div></div><div className="viewport"><Scene state={flight} controls={controls} field={airfields[fieldIndex]} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle} peers={peers} />{hud.crashed && <div className="crash"><strong>Sert iniş</strong><span>Yeni uçuş için sıfırla</span><button onClick={() => reset()}>Yeniden başla</button></div>}<div className="crosshair">+</div><div className="scene-label"><strong>{airfields[fieldIndex].name}</strong><span>{airfields[fieldIndex].subtitle} · {Math.abs(airfields[fieldIndex].wind).toFixed(1)} m/s yan rüzgâr</span></div>{hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}<div className="attitude"><span>YATIŞ {bank}°</span><span>BURUN {pitch}°</span><span>ALFA {Math.round(hud.angleOfAttack * 180 / Math.PI)}°</span></div><div className="hud"><div><small>HAVA HIZI</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div><div><small>İRTİFA</small><strong>{Math.round(Math.max(0, hud.position[1] - .25))}</strong><span>m</span></div><div><small>GAZ</small><strong>{Math.round(controls.current.throttle * 100)}</strong><span>%</span></div><div><small>BAŞ</small><strong>{Math.round((hud.yaw * 180 / Math.PI + 3600) % 360)}</strong><span>°</span></div></div></div><div className="toolbar"><label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value as VehicleKind; setVehicle(next); reset(next) }}>{vehicles.map(item => <option key={item.id} value={item.id}>{item.name} · {item.className}</option>)}</select></label><label>UÇUŞ ALANI <select value={fieldIndex} disabled={Boolean(roomCode)} onChange={e => { const nextField = Number(e.target.value); setFieldIndex(nextField); reset(vehicle, nextField) }}>{airfields.map((f, i) => <option value={i} key={f.name}>{f.name}</option>)}</select></label><div><label className="camera-choice">GÖRÜŞ <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}><option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option></select></label><label className="camera-zoom">YAKINLIK <input type="range" min="0.6" max="2.4" step="0.1" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label><button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>⛶ Tam ekran</button><button onClick={() => void toggleSound()}>{soundOn ? '◖ Sesi kapat' : '◖ Sesi aç'}</button><button onClick={() => setPaused(!paused)}>{paused ? '▶ Devam' : 'Ⅱ Duraklat'}</button><button onClick={() => reset()}>↺ Uçağı sıfırla</button></div></div></section>
+    <section className="info"><div><span>01</span><strong>KLAVYE</strong><p>W / S gaz · Oklar pitch ve roll · A / D roll · Q / E dümen. Drone ve helikopterde yaklaşık %50 gaz hover bölgesidir.</p></div><div><span>02</span><strong>RC KUMANDA / JOYSTICK</strong><p>USB cihazını bağla. Gamepad API üzerinden otomatik algılanır; kanal eşlemesini ayarlardan değiştir.</p></div><div><span>03</span><strong>ARAÇ DİNAMİĞİ</strong><p>240 Hz fizik motoru: sabit kanat aerodinamiği, drone rotorları, helikopter kolektifi ve rüzgâr. Gerçek RC modellerle kalibrasyon sürmektedir.</p></div></section>
     {showRoom && <div className="overlay" onClick={() => setShowRoom(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowRoom(false)}>✕</button><p className="eyebrow">CANLI UÇUŞ</p><h2>Çok oyunculu oda</h2>
       {roomCode ? <>
         <p><strong>Oda: {roomCode}</strong> · {roomIsProtected ? 'Şifreli' : 'Şifresiz'} · {roomCount} pilot</p>

@@ -136,7 +136,7 @@ export class Simulation {
   }
 
   reset(options: SimulationOptions = {}) {
-    if (options.aircraft) this.spec = aircraftById(options.aircraft)
+    if (options.aircraft) { this.spec = aircraftById(options.aircraft); this.assists = { ...this.spec.assists } }
     if (options.field) { this.field = fieldById(options.field); this.weather = { ...this.field.weather, ...options.weather } }
     if (options.assists) this.assists = { ...this.spec.assists, ...options.assists }
     if (options.weather) this.weather = { ...this.weather, ...options.weather }

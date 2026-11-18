@@ -87,7 +87,7 @@ export function quadController(spec: AircraftSpec, state: SimState, controls: Co
       const ax = clamp((targetVx - state.velocity[0]) * gain, -6, 6)
       const az = clamp((targetVz - state.velocity[2]) * gain, -6, 6)
       // Desired horizontal acceleration -> tilt (small angle: a = g tan(theta)).
-      pitchTarget = clamp(Math.atan2(-(ax * sy + az * cy), GRAVITY), -maxAngle, maxAngle)
+      pitchTarget = clamp(Math.atan2(ax * sy + az * cy, GRAVITY), -maxAngle, maxAngle)
       rollTarget = clamp(Math.atan2(ax * cy - az * sy, GRAVITY), -maxAngle, maxAngle)
     }
     const angleP = gentle ? 4.5 : 6
@@ -255,9 +255,18 @@ export function heliForces(spec: AircraftSpec, state: SimState, controls: Contro
   let thrust = ct * env.density * area * tipSpeed * tipSpeed * groundBoost * vortexFactor
   thrust = clamp(thrust, -spec.mass * GRAVITY * 4, spec.mass * GRAVITY * 6)
 
+  // A real tail rotor creates lateral thrust while cancelling engine torque.
+  // Helicopters are trimmed with a small opposing main-disc lateral tilt; without
+  // this rigging offset the aircraft accelerates sideways even at centred cyclic.
+  const cq = Math.abs(ct) * Math.abs(inflow) + (solidity * 0.012) / 8
+  const torque = cq * env.density * area * tipSpeed * tipSpeed * radius
+  const tailArm = rotor.tailArm ?? 0.72
+  const tailMax = rotor.tailThrust ?? 11
+  const tailCommand = clamp(torque / tailArm + heli.yawAssist + controls.rudder * tailMax * 0.5, -tailMax, tailMax)
+  const sideTrim = clamp(torque / Math.max(0.1, tailArm * Math.abs(thrust)), -0.15, 0.15)
   const discDir = normalize([
     -Math.sin(heli.tiltPitch),
-    Math.sin(heli.tiltRoll),
+    Math.sin(heli.tiltRoll) + sideTrim,
     -Math.cos(heli.tiltPitch) * Math.cos(heli.tiltRoll),
   ])
   const rotorArm: Vec3 = [0, 0, -0.16]
@@ -269,12 +278,7 @@ export function heliForces(spec: AircraftSpec, state: SimState, controls: Contro
   momentBody[0] += hub * heli.tiltRoll * loadRatio
   momentBody[1] += hub * heli.tiltPitch * loadRatio
 
-  const cq = Math.abs(ct) * Math.abs(inflow) + (solidity * 0.012) / 8
-  const torque = cq * env.density * area * tipSpeed * tipSpeed * radius
   momentBody[2] -= torque
-  const tailArm = rotor.tailArm ?? 0.72
-  const tailMax = rotor.tailThrust ?? 11
-  const tailCommand = clamp(torque / tailArm + heli.yawAssist + controls.rudder * tailMax * 0.5, -tailMax, tailMax)
   const tailForce: Vec3 = [0, -tailCommand, 0]
   const tailPos: Vec3 = [-tailArm, 0, -0.06]
   forceBody = add(forceBody, tailForce)

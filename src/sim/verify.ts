@@ -4,6 +4,7 @@ import { aircraftById } from './catalog'
 import { attitudeEuler, clamp, deg, rad } from './math'
 import { Simulation } from './simulation'
 import { zeroControls, type AircraftSpec, type Controls } from './types'
+import { hoverThrottle } from './rotor'
 
 /**
  * Automated flight-test harness. Every scenario flies the real physics model with
@@ -202,15 +203,23 @@ export function measureHover(id: string): Measurement {
   const startX = sim.state.position[0], startZ = sim.state.position[2]
   for (let t = 0; t < 12; t += dt) {
     if (spec.family === 'heli') {
+      // A human-assisted helicopter hover with collective compensation, heading
+      // hold and cyclic rate damping; a fixed 52% collective is NOT hover trim.
       const attitude = attitudeEuler(sim.state.attitude)
       set(sim, {
-        throttle: 0.52,
-        aileron: clamp(-attitude.roll * 1.6 - sim.state.omega[0] * 0.12 - sim.state.velocity[0] * 0.05, -0.5, 0.5),
-        elevator: clamp(-attitude.pitch * 1.6 - sim.state.omega[1] * 0.12 + sim.state.velocity[2] * 0.05, -0.5, 0.5),
+        throttle: clamp(0.41 + (startY - sim.state.position[1]) * 0.01 - sim.state.velocity[1] * 0.025, 0.2, 0.65),
+        aileron: clamp(-attitude.roll * 3 - sim.state.omega[0] * 0.3 - sim.state.velocity[0] * 0.15, -0.9, 0.9),
+        elevator: clamp(-attitude.pitch * 3 - sim.state.omega[1] * 0.3 - sim.state.velocity[2] * 0.15, -0.9, 0.9),
         rudder: clamp(-sim.state.omega[2] * 0.5, -0.5, 0.5),
+        aux: [0, 0, 0, 1, 0, 0, 0, 0],
       })
+    } else if (spec.id === 'cinedrone') {
+      // Cine drone's switch selects LOITER at neutral, ACRO at positive.
+      set(sim, { throttle: 0.5, aux: [0, 0, 0, 0, 0, 0, 0, 0] })
     } else {
-      set(sim, { throttle: spec.envelope.hoverThrottle ?? 0.5, aux: [1, 0, 0, 0, 0, 0, 0, 0] })
+      // Angle mode is attitude-only; match calculated hover power instead of
+      // treating an approximate catalogue throttle as calibrated flight data.
+      set(sim, { throttle: hoverThrottle(spec, sim.state), aux: [1, 0, 0, 0, 0, 0, 0, 0] })
     }
     sim.step(dt)
     if (sim.state.crashed) break
