@@ -4,7 +4,7 @@ Tarayıcıda RC uçuş eğitimi için geliştirilen prototip. React, TypeScript 
 
 ## Yerel çalıştırma
 
-Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Supabase bağlantısı için `.env.example` dosyasını `.env.local` olarak kopyalayıp yalnızca proje URL'sini ve publishable anahtarı girin. Doğrulama için `npm test` ve `npm run build`. Gamepad cihazını USB ile bağlayıp tarayıcı sayfasına odaklanın. W/S gaz; oklar pitch/roll; A/D roll; Q/E rudder. Kumanda ayarlarından 0–7 eksenlerini eşleyin. Her cihazın throttle yönü farklı olabilir; mevcut prototipte −1 tam gazdır. Cihaz desteği tarayıcı ve işletim sistemine bağlıdır.
+Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Supabase bağlantısı için `.env.example` dosyasını `.env.local` olarak kopyalayıp yalnızca proje URL'sini ve publishable anahtarı girin. Doğrulama için `npm test` ve `npm run build`. Gamepad cihazını USB ile bağlayıp tarayıcı sayfasına odaklanın. W/S gaz; oklar pitch/roll; A/D roll; Q/E rudder. Kumanda ayarlarında bağlı cihazın bütün eksenleri gösterilir; eşleme ve min/orta/maks değerlerini ayarlayın. Yeni kumanda uçuşu duraklatır ve sıfır gaz doğrulanana kadar etkinleşmez. Her cihazın gaz yönü farklı olabilir. Cihaz desteği tarayıcı ve işletim sistemine bağlıdır.
 
 ## Mimari ve mevcut sınırlar
 
