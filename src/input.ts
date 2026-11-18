@@ -6,6 +6,12 @@ export type AxisCalibration = { min: number; center: number; max: number }
 export type Calibration = Partial<Record<AxisKey, AxisCalibration>>
 export const defaultMapping: Mapping = { aileron: 0, elevator: 1, throttle: 2, rudder: 3 }
 export const defaultTuning: InputTuning = { reversed: { aileron: false, elevator: true, throttle: true, rudder: false }, deadzone: .06, expo: .2 }
+export function detectMovedAxis(baseline: number[], current: number[], threshold = .35): number | null {
+  if (baseline.length !== current.length || !current.length) return null
+  const changes = current.map((value, index) => Number.isFinite(value) && Number.isFinite(baseline[index]) ? Math.abs(value - baseline[index]) : 0)
+  const largest = Math.max(...changes)
+  return largest >= threshold ? changes.indexOf(largest) : null
+}
 export function calibrateAxis(raw: number, range?: AxisCalibration): number {
   if (!range || !Number.isFinite(raw) || !Number.isFinite(range.min) || !Number.isFinite(range.center) || !Number.isFinite(range.max) || range.center - range.min < .15 || range.max - range.center < .15) return Math.max(-1, Math.min(1, raw || 0))
   return Math.max(-1, Math.min(1, raw < range.center ? (raw - range.center) / (range.center - range.min) : (raw - range.center) / (range.max - range.center)))

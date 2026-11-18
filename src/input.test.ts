@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calibrateAxis, defaultMapping, defaultTuning, gamepadControls } from './input'
+import { calibrateAxis, defaultMapping, defaultTuning, detectMovedAxis, gamepadControls } from './input'
 
 const pad = (axes: number[]) => ({ axes }) as unknown as Gamepad
 
@@ -31,5 +31,10 @@ describe('RC input tuning', () => {
     expect(c.aileron).toBeGreaterThan(.39)
     expect(c.elevator).toBe(0)
     expect(c.throttle).toBe(0)
+  })
+  it('finds the moved stick axis without reacting to jitter', () => {
+    expect(detectMovedAxis([0, 0, -1, 0], [.01, -.02, -.98, 0])).toBeNull()
+    expect(detectMovedAxis([0, 0, -1, 0], [.01, -.02, .6, 0])).toBe(2)
+    expect(detectMovedAxis([0, 0], [0])).toBeNull()
   })
 })

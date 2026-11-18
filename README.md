@@ -10,7 +10,7 @@ FlightSimRC; model uçak, drone, helikopter ve EDF jet kontrolünü öğrenmek i
 
 1. [FlightSimRC'yi aç](https://snansrin.github.io/flightsimrc/).
 2. Trainer 1500 ve Anadolu Eğitim Pisti ile başla. Klavyede **W/S gaz**, **yön tuşları ve A/D yatış**, **yukarı/aşağı burun**, **Q/E dümen**.
-3. USB RC kumandanı tak. **Kumanda ayarları** bölümünde bağlı cihazı seç, dört kanalı eşle ve her eksenin min/orta/maks değerini kaydet. Gaz sıfırdayken **Kumandayı etkinleştir**.
+3. USB RC kumandanı tak. **Kumanda ayarları** bölümünde bağlı cihazı seç. Her kontrol için **Ekseni bul** düğmesine basıp ilgili kolu hareket ettir; ardından min/orta/maks değerlerini kaydet. Gaz sıfırdayken **Kumandayı etkinleştir**.
 4. Arkadaşınla uçmak için **Çok oyunculu → Yeni oda oluştur**. Davet bağlantısını paylaş; diğer pilot aynı bağlantıyla odaya katılsın. Oda en fazla dört pilot içindir.
 
 ### RadioLink T12D görünmüyorsa
