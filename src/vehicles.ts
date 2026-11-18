@@ -25,7 +25,7 @@ function stepRotorcraft(state: FlightState, c: Controls, dt: number, wind: numbe
   const power = clamp(c.throttle, 0, 1)
   const response = helicopter ? 2.3 : 4.2
   const targetRoll = clamp(c.aileron, -1, 1) * (helicopter ? .46 : .52)
-  const targetPitch = clamp(c.elevator, -1, 1) * (helicopter ? .46 : .52)
+  const targetPitch = -clamp(c.elevator, -1, 1) * (helicopter ? .46 : .52)
   const rollRate = (targetRoll - state.roll) * response
   const pitchRate = (targetPitch - state.pitch) * response
   const roll = state.roll + rollRate * h
@@ -34,7 +34,7 @@ function stepRotorcraft(state: FlightState, c: Controls, dt: number, wind: numbe
   const yaw = state.yaw + yawRate * h
   const vertical = (power - (helicopter ? .52 : .5)) * (helicopter ? 20 : 24) * Math.cos(roll) * Math.cos(pitch) - vy * (helicopter ? 1.2 : 1.8)
   const nextVy = clamp(vy + vertical * h, -12, 12)
-  const forwardAccel = Math.sin(pitch) * (helicopter ? 11 : 15)
+  const forwardAccel = -Math.sin(pitch) * (helicopter ? 11 : 15)
   const sideAccel = Math.sin(roll) * (helicopter ? 11 : 15)
   const nextVx = vx + (sideAccel * Math.cos(yaw) + forwardAccel * Math.sin(yaw) + wind * .15 - vx * (helicopter ? .8 : 1.2)) * h
   const nextVz = vz + (forwardAccel * Math.cos(yaw) - sideAccel * Math.sin(yaw) - vz * (helicopter ? .8 : 1.2)) * h

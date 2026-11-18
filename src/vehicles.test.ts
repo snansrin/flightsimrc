@@ -18,4 +18,10 @@ describe('vehicle selection and dynamics', () => {
     expect(stepVehicle('jet', flight, neutral, 1 / 60).stalled).toBe(true)
     expect(stepVehicle('trainer', flight, neutral, 1 / 60).stalled).toBe(false)
   })
+  it('tilts a hovering drone forward under forward stick input', () => {
+    let state = { ...initialVehicle('drone'), position: [0, 3, 0] as [number, number, number] }
+    for (let i = 0; i < 60; i++) state = stepVehicle('drone', state, { ...neutral, throttle: .5, elevator: .4 }, 1 / 60)
+    expect(state.pitch).toBeLessThan(0)
+    expect(state.position[2]).toBeGreaterThan(0)
+  })
 })
