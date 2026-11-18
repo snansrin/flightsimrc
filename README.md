@@ -25,6 +25,8 @@ Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Doğrulama için `
 
 ## Lisans ve kaynaklar
 
-Bu depodaki özgün kod MIT lisanslıdır. Üçüncü taraf paketler kendi lisanslarına tabidir; yayımlamadan önce kilit dosyasından tam bir lisans envanteri çıkarılmalıdır. Harita görüntüsü, 3D model ve ses gibi harici varlıklar kullanılmadı. Google Fonts çevrimiçi yüklenir; çevrimdışı/mahremiyet gereksinimi için yerel barındırma değerlendirilmeli.
+Bu depodaki özgün kod MIT lisanslıdır. Doğrudan kullanılan paketlerin lisansları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasında listelenir. Harita görüntüsü, harici 3D model, ses veya uzaktan yüklenen yazı tipi kullanılmaz. Yeni varlık eklenmeden önce kullanım ve dağıtım izni doğrulanmalıdır.
+
+Ücretsiz Supabase planında aynı kuruluştaki iki etkin proje sınırı nedeniyle FlightSimRC veritabanı henüz oluşturulamadı. Mevcut DendroGeo projeleri etkilenmedi. Bu nedenle hesap, ilerleme ve multiplayer özellikleri etkin değildir.
 
 Teknik kararlar için birincil kaynaklar: [Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [Colyseus](https://docs.colyseus.io/), [Three.js](https://threejs.org/), [React Three Fiber](https://r3f.docs.pmnd.rs/). Gerçek RC eğitiminin güvenlik ve yerel mevzuat koşulları ayrıca doğrulanmalıdır.
