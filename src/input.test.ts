@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calibrateAxis, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, normalizeSource, readSource } from './input'
+import { calibrateAxis, defaultChannels, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, normalizeSource, readSource } from './input'
 
 const pad = (axes: number[]) => ({ axes }) as unknown as Gamepad
 
@@ -49,5 +49,11 @@ describe('RC input tuning', () => {
     expect(detectMovedSource(Array(12).fill(0), [...Array(11).fill(0), .8], [], [])).toBe('axis:11')
     expect(normalizeSource(11, 'axis:0')).toBe('axis:11')
     expect(normalizeSource('axis:9999', 'axis:0')).toBe('axis:0')
+  })
+  it('builds a channel panel from each device reported inputs', () => {
+    expect(defaultChannels(7, 0).auxiliary).toEqual(['axis:4', 'axis:5', 'axis:6'])
+    expect(defaultChannels(16, 0).auxiliary).toHaveLength(12)
+    expect(defaultChannels(2, 2).mapping.throttle).toBe('button:0')
+    expect(defaultChannels(0, 0).auxiliary).toHaveLength(0)
   })
 })

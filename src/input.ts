@@ -7,6 +7,21 @@ export type AxisCalibration = { min: number; center: number; max: number }
 export type Calibration = Partial<Record<AxisKey, AxisCalibration>>
 export const defaultMapping: Mapping = { aileron: 'axis:0', elevator: 'axis:1', throttle: 'axis:2', rudder: 'axis:3' }
 export const defaultAuxiliary: InputSource[] = Array.from({ length: 8 }, (_, index) => `axis:${index + 4}` as InputSource)
+export function deviceSources(axisCount: number, buttonCount: number): InputSource[] {
+  const safeAxes = Math.max(0, Math.min(256, Math.floor(axisCount) || 0))
+  const safeButtons = Math.max(0, Math.min(256, Math.floor(buttonCount) || 0))
+  return [
+    ...Array.from({ length: safeAxes }, (_, index) => `axis:${index}` as InputSource),
+    ...Array.from({ length: safeButtons }, (_, index) => `button:${index}` as InputSource),
+  ]
+}
+export function defaultChannels(axisCount: number, buttonCount: number): { mapping: Mapping; auxiliary: InputSource[] } {
+  const sources = deviceSources(axisCount, buttonCount)
+  const flightKeys: AxisKey[] = ['aileron', 'elevator', 'throttle', 'rudder']
+  const mapping = { ...defaultMapping }
+  flightKeys.forEach((key, index) => { mapping[key] = sources[index] ?? defaultMapping[key] })
+  return { mapping, auxiliary: sources.slice(4) }
+}
 export function normalizeSource(value: unknown, fallback: InputSource): InputSource {
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < 256) return `axis:${value}`
   return typeof value === 'string' && /^(axis|button):(?:0|[1-9]\d{0,2})$/.test(value) ? value as InputSource : fallback
