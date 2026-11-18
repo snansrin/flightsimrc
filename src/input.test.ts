@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calibrateAxis, defaultMapping, defaultTuning, detectMovedAxis, gamepadControls } from './input'
+import { calibrateAxis, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, normalizeSource, readSource } from './input'
 
 const pad = (axes: number[]) => ({ axes }) as unknown as Gamepad
 
@@ -36,5 +36,18 @@ describe('RC input tuning', () => {
     expect(detectMovedAxis([0, 0, -1, 0], [.01, -.02, -.98, 0])).toBeNull()
     expect(detectMovedAxis([0, 0, -1, 0], [.01, -.02, .6, 0])).toBe(2)
     expect(detectMovedAxis([0, 0], [0])).toBeNull()
+  })
+  it('reads channels beyond eight axes and analog button channels', () => {
+    const device = { axes: Array.from({ length: 16 }, (_, i) => i === 11 ? .75 : 0), buttons: [{ value: .8 }] } as unknown as Gamepad
+    expect(readSource(device, 'axis:11')).toBe(.75)
+    expect(readSource(device, 'button:0')).toBeCloseTo(.6)
+    expect(gamepadControls(device, { ...defaultMapping, aileron: 'axis:11' }).aileron).toBeGreaterThan(.6)
+    expect(gamepadControls(device, { ...defaultMapping, aileron: 'button:0' }).aileron).toBeGreaterThan(.49)
+  })
+  it('detects button channels and migrates old numeric mappings', () => {
+    expect(detectMovedSource([0, 0], [0, .02], [0, 0], [0, 1])).toBe('button:1')
+    expect(detectMovedSource(Array(12).fill(0), [...Array(11).fill(0), .8], [], [])).toBe('axis:11')
+    expect(normalizeSource(11, 'axis:0')).toBe('axis:11')
+    expect(normalizeSource('axis:9999', 'axis:0')).toBe('axis:0')
   })
 })

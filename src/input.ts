@@ -1,10 +1,30 @@
 import type { Controls } from './flight'
 export type AxisKey = keyof Controls
-export type Mapping = Record<AxisKey, number>
+export type InputSource = `axis:${number}` | `button:${number}`
+export type Mapping = Record<AxisKey, InputSource>
 export type InputTuning = { reversed: Record<AxisKey, boolean>; deadzone: number; expo: number }
 export type AxisCalibration = { min: number; center: number; max: number }
 export type Calibration = Partial<Record<AxisKey, AxisCalibration>>
-export const defaultMapping: Mapping = { aileron: 0, elevator: 1, throttle: 2, rudder: 3 }
+export const defaultMapping: Mapping = { aileron: 'axis:0', elevator: 'axis:1', throttle: 'axis:2', rudder: 'axis:3' }
+export const defaultAuxiliary: InputSource[] = Array.from({ length: 8 }, (_, index) => `axis:${index + 4}` as InputSource)
+export function normalizeSource(value: unknown, fallback: InputSource): InputSource {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < 256) return `axis:${value}`
+  return typeof value === 'string' && /^(axis|button):(?:0|[1-9]\d{0,2})$/.test(value) ? value as InputSource : fallback
+}
+export function readSource(pad: Gamepad, source: InputSource): number | undefined {
+  const [kind, indexText] = source.split(':')
+  const index = Number(indexText)
+  if (kind === 'axis') return pad.axes[index]
+  const button = pad.buttons?.[index]
+  return button ? button.value * 2 - 1 : undefined
+}
+export function detectMovedSource(baseline: number[], current: number[], baselineButtons: number[], currentButtons: number[]): InputSource | null {
+  const axis = detectMovedAxis(baseline, current)
+  const button = detectMovedAxis(baselineButtons, currentButtons, .5)
+  if (axis === null) return button === null ? null : `button:${button}`
+  if (button === null) return `axis:${axis}`
+  return Math.abs(current[axis] - baseline[axis]) >= Math.abs(currentButtons[button] - baselineButtons[button]) ? `axis:${axis}` : `button:${button}`
+}
 export const defaultTuning: InputTuning = { reversed: { aileron: false, elevator: true, throttle: true, rudder: false }, deadzone: .06, expo: .2 }
 export function detectMovedAxis(baseline: number[], current: number[], threshold = .35): number | null {
   if (baseline.length !== current.length || !current.length) return null
@@ -17,7 +37,7 @@ export function calibrateAxis(raw: number, range?: AxisCalibration): number {
   return Math.max(-1, Math.min(1, raw < range.center ? (raw - range.center) / (range.center - range.min) : (raw - range.center) / (range.max - range.center)))
 }
 export function gamepadControls(pad: Gamepad, mapping: Mapping, tuning: InputTuning = defaultTuning, calibration: Calibration = {}): Controls {
-  const axis = (key: AxisKey) => calibrateAxis(pad.axes[mapping[key]] ?? 0, calibration[key]) * (tuning.reversed[key] ? -1 : 1)
+  const axis = (key: AxisKey) => calibrateAxis(readSource(pad, mapping[key]) ?? 0, calibration[key]) * (tuning.reversed[key] ? -1 : 1)
   const shape = (v: number) => {
     const deadzone = Math.max(0, Math.min(.3, tuning.deadzone))
     if (Math.abs(v) <= deadzone) return 0

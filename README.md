@@ -10,14 +10,14 @@ FlightSimRC; model uçak, drone, helikopter ve EDF jet kontrolünü öğrenmek i
 
 1. [FlightSimRC'yi aç](https://snansrin.github.io/flightsimrc/).
 2. Trainer 1500 ve Anadolu Eğitim Pisti ile başla. Klavyede **W/S gaz**, **yön tuşları ve A/D yatış**, **yukarı/aşağı burun**, **Q/E dümen**.
-3. USB RC kumandanı tak. **Kumanda ayarları** bölümünde bağlı cihazı seç. Her kontrol için **Ekseni bul** düğmesine basıp ilgili kolu hareket ettir; ardından min/orta/maks değerlerini kaydet. Gaz sıfırdayken **Kumandayı etkinleştir**.
+3. USB RC kumandanı tak. **Kumanda ayarları** bölümünde bağlı cihazı seç. Ekran tarayıcının bildirdiği tüm eksenleri ve düğmeleri, ayrıca 12 ayrı kanal eşlemesini gösterir. Her kanal için **Ekseni bul/Kanalı bul** düğmesine basıp ilgili kolu veya anahtarı hareket ettir; ardından min/orta/maks değerlerini kaydet. Gaz sıfırdayken **Kumandayı etkinleştir**. Kanal 1–4 uçuşa bağlıdır; kanal 5–12 şimdilik izleme ve cihaz profili içindir.
 4. Arkadaşınla uçmak için **Çok oyunculu → Yeni oda oluştur**. Davet bağlantısını paylaş; diğer pilot aynı bağlantıyla odaya katılsın. Oda en fazla dört pilot içindir.
 
 ### RadioLink T12D görünmüyorsa
 
 T12D'nin bilgisayarda oyun kumandası olarak görünmesi gerekir. [RadioLink'in T12D kılavuzu](https://radiolink.com/en/t12d_manual), dahili simülatör işlevi için uygun firmware gerektiğini söylüyor; [üreticinin SSS sayfası](https://www.radiolink.com/en/t12d_faq) Type-C ile dahili simülatör veya dongle kullanımını anlatıyor. Veri taşıyan USB-C kablosu ve üreticinin simülatör kipini kullan. Windows'ta **Win+R → joy.cpl** ile kumandanın ve hareket eden eksenlerin görünüp görünmediğini kontrol et. Windows'ta hiç oyun kumandası olarak görünmeyen bir cihazı web sayfası Gamepad API üzerinden otomatik tanıyamaz. Cihaz görünüyorsa sayfayı odaklayıp kumandada bir düğmeye bas veya kolu oynat; ardından ayarlarda **Cihazları yeniden tara**. Birden fazla joystick bağlıysa listeden T12D'yi seç.
 
-Site cihazın firmware'ini değiştirmez. Firmware işlemi gerekiyorsa yalnızca üreticinin modeline uygun resmi yönergesini kullan. T12D'nin farklı firmware ve bağlantı kipleri gerçek donanımla henüz uçtan uca doğrulanmadı.
+Tarayıcı bir kumandanın yalnızca işletim sisteminin ve Gamepad API'nin sunduğu eksen/düğmelerini okuyabilir. 12 RF kanalının tarayıcıda otomatik olarak 12 eksen olarak çıkacağı garanti değildir. [RadioLink'in resmi T12D firmware notlarına](https://radiolink.com/en/t12d_firmwares) göre V2.0.4 sürümünde gamepad joystick 16 kanala genişletildi. Kumandadaki sürümü kontrol et; güncelleme gerekiyorsa üreticinin modeline uygun resmi yönergesini ve yedekleme adımlarını izle. Site firmware'i değiştirmez. T12D'nin farklı firmware ve bağlantı kipleri gerçek donanımla henüz uçtan uca doğrulanmadı.
 
 ## Neler çalışıyor?
 
