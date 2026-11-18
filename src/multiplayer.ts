@@ -119,6 +119,8 @@ export function connectRoom(options: {
     ready = false
     failed = true
     options.onStatus('error', 'Oda bulunamadı veya şifre yanlış. Kodu ve şifreyi kontrol et.')
+    options.onRoster([])
+    options.onPeers([], 1)
     void cloud?.removeChannel(channel)
   }, 6000)
   const timer = window.setInterval(() => {

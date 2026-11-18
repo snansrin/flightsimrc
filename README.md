@@ -10,7 +10,7 @@ FlightSimRC; model uçak, drone, helikopter ve EDF jet kontrolünü öğrenmek i
 
 1. [FlightSimRC'yi aç](https://snansrin.github.io/flightsimrc/).
 2. Trainer 1500 ve Anadolu Eğitim Pisti ile başla. Klavyede **W/S gaz**, **yön tuşları ve A/D yatış**, **yukarı/aşağı burun**, **Q/E dümen**.
-3. USB RC kumandanı veya joystick'ini tak. **Kumanda ayarları** bütün bağlı cihazları ve her birinin eksen/düğme sayısını gösterir; otomatik seçimde ilk görünen cihaz kullanılır. Birden fazla cihaz bağlıysa listeden istediğini seç. Kanal paneli seçilen cihazın tarayıcıya sunduğu girdi sayısı kadar açılır; sabit 12 kanal sınırı yoktur. Her kanal için **Ekseni bul/Kanalı bul** düğmesine basıp ilgili kolu veya anahtarı hareket ettir; ardından min/orta/maks değerlerini kaydet. Gaz sıfırdayken **Kumandayı etkinleştir**. İlk dört kanal uçuşa bağlıdır; ek kanallar şimdilik izleme ve cihaz profili içindir.
+3. USB RC kumandanı veya joystick'ini tak. **Kumanda ayarları** bütün bağlı cihazları ve her birinin eksen/düğme sayısını gösterir; otomatik seçimde ilk görünen cihaz kullanılır. Birden fazla cihaz bağlıysa listeden istediğini seç. Kanal paneli seçilen cihazın tarayıcıya sunduğu girdi sayısı kadar açılır; sabit 12 kanal sınırı yoktur. Her kanal için **Ekseni bul/Kanalı bul** düğmesine basıp ilgili kolu veya anahtarı hareket ettir; ardından fiziksel alt/orta/üst konumları kaydet. Ters uçlu eksenler de kalibre edilir. Gaz sıfırdayken **Kumandayı etkinleştir**. İlk dört kanal uçuşa bağlıdır; ek kanallar şimdilik izleme ve cihaz profili içindir. Bağlantı sorunu varsa **Kumanda tanı bilgisini kopyala** ile tarayıcının gördüğü cihazları ve canlı değerleri al.
 4. Arkadaşınla uçmak için **Çok oyunculu** panelinde pilot adını yaz, istersen en az 8 karakterlik oda şifresi belirle ve **Yeni oda oluştur**. Davet bağlantısını paylaş; şifre koyduysan onu ayrıca ilet. Diğer pilot aynı kod ve şifreyle katılır. Pilot adları ve kurucu odada listelenir. Oda en fazla dört pilot içindir.
 
 ### RadioLink T12D görünmüyorsa
@@ -24,12 +24,12 @@ Tarayıcı bir kumandanın yalnızca işletim sisteminin ve Gamepad API'nin sund
 | Alan | Mevcut durum |
 | --- | --- |
 | Uçuş | 60 Hz sabit adımlı trainer/jet kuvvet modeli; ayrı stabilize drone ve helikopter davranışı; stall, rüzgâr ve yer teması |
-| Görsel | Kodla oluşturulmuş dört araç, dokulu pist, hangar, HDR gökyüzü, HUD, takip ve sabit pilot kamerası |
+| Görsel | Kodla oluşturulmuş dört araç, dokulu pist, hangar, HDR gökyüzü, HUD, takip/RC pilot/araç üstü kameraları ve yakınlaştırma |
 | Kumanda | Gamepad API, cihaz seçimi, cihaz bazlı profil, eksen eşleme, tersleme, ölü bölge, expo, min/orta/maks kalibrasyonu, sıfır gaz güvenlik adımı |
 | Canlı oda | Supabase Realtime ile oda kodu, isteğe bağlı şifre, pilot adı/listesi, yaklaşık 5 Hz konum paylaşımı ve diğer araçların sahnede gösterimi |
 | Yayın | Her `main` güncellemesinde GitHub Actions test/derleme ve GitHub Pages yayını |
 
-Beş uçuş alanı şu an farklı hava/renk temalarıdır; beş ayrı gerçek coğrafi saha değildir. Oda şifresi tarayıcıda PBKDF2 ile kanal adına dönüştürülür; şifre sunucuya açık metin olarak gönderilmez veya bağlantıya eklenmez. Supabase Realtime kanalları teknik olarak herkese açıktır: doğru kanal adını bilen biri erişebilir. Şifresiz odada kodu bilen herkes bağlanabilir. Bu, sunucu tarafında doğrulanan bir hesap/oda erişim sistemi değildir; güçlü bir oda şifresi kullan. Pilot adları doğrulanmış kimlik değildir. Bu serbest uçuş sürümünde yetkili sunucu, çarpışma mutabakatı, yarış hakemliği ve hile önleme yoktur.
+Beş uçuş alanı farklı renk/hava koşullarına ek olarak kıyı, dağ, kumul, kar veya tarla işaretleri taşır; beş ayrı gerçek coğrafi saha değildir. Oda şifresi tarayıcıda PBKDF2 ile kanal adına dönüştürülür; şifre sunucuya açık metin olarak gönderilmez veya bağlantıya eklenmez. Supabase Realtime kanalları teknik olarak herkese açıktır: doğru kanal adını bilen biri erişebilir. Şifresiz odada kodu bilen herkes bağlanabilir. Bu, sunucu tarafında doğrulanan bir hesap/oda erişim sistemi değildir; güçlü bir oda şifresi kullan. Pilot adları doğrulanmış kimlik değildir. Bu serbest uçuş sürümünde yetkili sunucu, çarpışma mutabakatı, yarış hakemliği ve hile önleme yoktur.
 
 ## Yerel geliştirme
 

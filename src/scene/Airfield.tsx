@@ -3,13 +3,13 @@ import { useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
 
-export type AirfieldConfig = { name: string; subtitle: string; grass: string; sky: string; hills: string; wind: number; hangar: string }
+export type AirfieldConfig = { name: string; subtitle: string; grass: string; sky: string; hills: string; wind: number; hangar: string; kind: 'plain' | 'coast' | 'alpine' | 'desert' | 'north' }
 export const airfields: AirfieldConfig[] = [
-  { name: 'Anadolu Eğitim Pisti', subtitle: 'Açık ova · sakin hava', grass: '#76916b', sky: '#accbe0', hills: '#6c846f', wind: 0, hangar: '#e8e4d8' },
-  { name: 'Ege Kıyı Pisti', subtitle: 'Kıyı rüzgârı · yan rüzgâr', grass: '#a7a57c', sky: '#a6d0df', hills: '#8b987b', wind: 1.5, hangar: '#e8e1cd' },
-  { name: 'Alp Vadisi', subtitle: 'Vadi · değişken hava', grass: '#71906e', sky: '#b1c9d7', hills: '#637477', wind: -2, hangar: '#dce2df' },
-  { name: 'Çöl Meydanı', subtitle: 'Kuru hava · sıcak zemin', grass: '#bb9d72', sky: '#c5d8dc', hills: '#b59670', wind: 2.5, hangar: '#ded2b8' },
-  { name: 'Kuzey Yaylası', subtitle: 'Serin hava · hafif rüzgâr', grass: '#819386', sky: '#c5d6dc', hills: '#6b7e7e', wind: -1.2, hangar: '#e7e7e0' },
+  { name: 'Anadolu Eğitim Pisti', subtitle: 'Açık ova · sakin hava', grass: '#76916b', sky: '#accbe0', hills: '#6c846f', wind: 0, hangar: '#e8e4d8', kind: 'plain' },
+  { name: 'Ege Kıyı Pisti', subtitle: 'Kıyı rüzgârı · yan rüzgâr', grass: '#a7a57c', sky: '#a6d0df', hills: '#8b987b', wind: 1.5, hangar: '#e8e1cd', kind: 'coast' },
+  { name: 'Alp Vadisi', subtitle: 'Vadi · değişken hava', grass: '#71906e', sky: '#b1c9d7', hills: '#637477', wind: -2, hangar: '#dce2df', kind: 'alpine' },
+  { name: 'Çöl Meydanı', subtitle: 'Kuru hava · sıcak zemin', grass: '#bb9d72', sky: '#c5d8dc', hills: '#b59670', wind: 2.5, hangar: '#ded2b8', kind: 'desert' },
+  { name: 'Kuzey Yaylası', subtitle: 'Serin hava · hafif rüzgâr', grass: '#819386', sky: '#c5d6dc', hills: '#6b7e7e', wind: -1.2, hangar: '#e7e7e0', kind: 'north' },
 ]
 
 function prepareTexture(texture: THREE.Texture, repeatX: number, repeatY: number, color = false) {
@@ -44,6 +44,18 @@ function Windsock() {
   return <group position={[8, 0, 14]}><mesh position={[0, 2.3, 0]} castShadow><cylinderGeometry args={[.025, .04, 4.6, 10]} /><meshStandardMaterial color="#cbd2d1" metalness={.6} /></mesh><mesh position={[.5, 4.45, 0]} rotation={[0, 0, -Math.PI / 2]}><coneGeometry args={[.22, 1.1, 12, 1, true]} /><meshStandardMaterial color="#dc5538" side={THREE.DoubleSide} /></mesh><mesh position={[1.04, 4.45, 0]} rotation={[0, 0, -Math.PI / 2]}><torusGeometry args={[.13, .018, 6, 12]} /><meshStandardMaterial color="#f7ece4" /></mesh></group>
 }
 
+function TerrainLandmarks({ kind }: { kind: AirfieldConfig['kind'] }) {
+  if (kind === 'coast') return <>
+    <mesh position={[190, .015, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[280, 2000]} /><meshStandardMaterial color="#4d8296" metalness={.25} roughness={.38} /></mesh>
+    <mesh position={[49, .02, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[5, 2000]} /><meshStandardMaterial color="#d5c59b" roughness={1} /></mesh>
+    {Array.from({ length: 18 }, (_, i) => <mesh key={i} position={[55 + (i % 3) * 4, .025, -210 + i * 25]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.5, 10]} /><meshBasicMaterial color="#d8e8e8" transparent opacity={.62} /></mesh>)}
+  </>
+  if (kind === 'alpine') return <>{[-1, 1].flatMap(side => Array.from({ length: 7 }, (_, i) => <group key={`${side}-${i}`} position={[side * (125 + i * 27), 4, -170 + i * 85]}><mesh castShadow><coneGeometry args={[60 + i * 8, 130 + i * 12, 5]} /><meshStandardMaterial color="#66787b" roughness={1} flatShading /></mesh><mesh position={[0, 44 + i * 4, 0]}><coneGeometry args={[19 + i * 3, 44, 5]} /><meshStandardMaterial color="#dce3df" flatShading /></mesh></group>))}</>
+  if (kind === 'desert') return <>{Array.from({ length: 24 }, (_, i) => <mesh key={i} position={[(i % 2 ? -1 : 1) * (50 + i * 5), .3, -230 + i * 25]} scale={[25 + i % 4 * 6, 1.5 + i % 3, 13 + i % 5 * 3]}><sphereGeometry args={[1, 12, 6]} /><meshStandardMaterial color={i % 2 ? '#c5a479' : '#ddbb88'} roughness={1} flatShading /></mesh>)}</>
+  if (kind === 'north') return <>{Array.from({ length: 18 }, (_, i) => <mesh key={i} position={[(i % 2 ? -1 : 1) * (65 + i * 9), .02, -220 + i * 30]} rotation={[-Math.PI / 2, 0, 0]}><circleGeometry args={[7 + i % 4 * 2, 8]} /><meshStandardMaterial color="#d5dedb" roughness={1} /></mesh>)}</>
+  return <>{Array.from({ length: 12 }, (_, i) => <mesh key={i} position={[(i % 2 ? -1 : 1) * (65 + i * 12), .01, -210 + i * 35]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[25 + i % 4 * 5, 38]} /><meshStandardMaterial color={i % 2 ? '#8a9b66' : '#b1a87a'} roughness={1} /></mesh>)}</>
+}
+
 export function Airfield({ field }: { field: AirfieldConfig }) {
   const asset = (name: string) => `${import.meta.env.BASE_URL}textures/${name}`
   const maps = useLoader(THREE.TextureLoader, [
@@ -71,6 +83,7 @@ export function Airfield({ field }: { field: AirfieldConfig }) {
     {Array.from({ length: 12 }, (_, i) => <mesh key={i} position={[0, .024, -77 + i * 14]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.16, 5]} /><meshBasicMaterial color="#f1eddd" /></mesh>)}
     {[-1, 1].flatMap(side => Array.from({ length: 4 }, (_, i) => <mesh key={`${side}-${i}`} position={[side * (1.2 + i * .7), .025, 78]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[.42, 3.3]} /><meshBasicMaterial color="#f4eee0" /></mesh>))}
     <Hangar color={field.hangar} /><Windsock />
+    <TerrainLandmarks kind={field.kind} />
     {trees.map((tree, i) => <Tree key={i} {...tree} />)}
     {Array.from({ length: 12 }, (_, i) => <Hill key={i} position={[(i - 6) * 95, -20, 360 + (i % 4) * 25]} scale={[83 + i % 5 * 8, 30 + i % 3 * 7, 60]} color={field.hills} />)}
   </>
