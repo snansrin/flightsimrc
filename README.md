@@ -1,38 +1,51 @@
 # FlightSimRC
 
-Tarayıcıda RC uçuş eğitimi için geliştirilen prototip. React, TypeScript ve React Three Fiber kullanır. Pervaneli trainer, EDF jet, dört rotorlu drone ve RC helikopter için seçilebilir özgün sahne modelleri ve ayrı eğitim dinamikleri; pist çevresi, beş hava sahası teması, isteğe bağlı sentezlenmiş motor sesi, klavye/Gamepad girişi, eksen eşleme, HUD, takip/pilot kamerası, duraklatma ve sıfırlama içerir.
+**Tarayıcıda RC uçuş pratiği ve birlikte serbest uçuş.**
 
-## Yerel çalıştırma
+**Canlı site:** https://snansrin.github.io/flightsimrc/
 
-Node.js 22 kullanın. `npm install`, ardından `npm run dev`. Supabase bağlantısı için `.env.example` dosyasını `.env.local` olarak kopyalayıp yalnızca proje URL'sini ve publishable anahtarı girin. Doğrulama için `npm test` ve `npm run build`. Gamepad cihazını USB ile bağlayıp tarayıcı sayfasına odaklanın. W/S gaz; oklar pitch/roll; A/D roll; Q/E rudder. Kumanda ayarlarında bağlı cihazın bütün eksenleri gösterilir; eşleme ve min/orta/maks değerlerini ayarlayın. Yeni kumanda uçuşu duraklatır ve sıfır gaz doğrulanana kadar etkinleşmez. Her cihazın gaz yönü farklı olabilir. Cihaz desteği tarayıcı ve işletim sistemine bağlıdır.
+FlightSimRC; model uçak, drone, helikopter ve EDF jet kontrolünü öğrenmek için geliştirilen açık kaynaklı bir web simülatörüdür. Klavye veya tarayıcının tanıdığı USB kumandayla uçabilir, kumanda eksenlerini eşleyip kalibre edebilir, pist ve rüzgâr koşullarını seçebilir, aynı oda koduyla arkadaşlarınızın araçlarını canlı sahnede görebilirsiniz. Proje hâlâ gelişmektedir: uçuş katsayıları gerçek araç ölçümleriyle doğrulanmış değildir ve çok oyunculu sürüm serbest uçuş içindir.
 
-## Mimari ve mevcut sınırlar
+## Hemen dene
 
-- `src/flight.ts`: 60 Hz sabit adımlı, hava akışına bağlı 3B kuvvet entegrasyonu; kaldırma/sürükleme, kademeli stall, yan rüzgâr, sönümlü açısal hareket, yatışla yönelen kaldırma ve pist teması. Kamera ve giriş tepkisi de kare hızından bağımsız yumuşatılır. Katsayılar uçuş testiyle doğrulanmadı; tam 6DoF fizik iddiası yoktur. Ayrıntı ve doğrulama sınırları [uçuş modeli belgesinde](docs/flight-model.md).
-- `src/vehicles.ts`: jet için farklı itki/kaldırma/stall profili; drone ve helikopter için ayrı, stabilize edilmiş hover ve yönelim tepkisi. Bunlar uçuş eğitimi prototipleridir; gerçek rotor, EDF, motor veya ESC performansıyla kalibre edilmemiştir.
-- `src/audio.ts`: kullanıcı ses düğmesine bastığında başlayan Web Audio motor/rotor/EDF sentezi. Sesler gerçek motor kayıtları veya akustik ölçüm değildir.
-- `src/input.ts`: Gamepad kanal eşlemesi, kanal tersleme, ölü bölge, expo ve ölçülen min/orta/maks değerlerine göre eksen normalizasyonu. Profiller cihaz kimliğine göre bu tarayıcıda saklanır. Gerçek kumandalarla uyumluluk ve kalibrasyon doğrulaması henüz yapılmadı.
-- `src/scene/Trainer.tsx`: özgün kodla oluşturulmuş trainer geometrisi, kanat oranları, iniş takımı ve hareketli kontrol yüzeyleri. [Apprentice STS kılavuzundaki](https://www.horizonhobby.com/on/demandware.static/Sites-horizon-us-Site/Sites-horizon-master/default/Manuals/EFL3700-Manual-EN.pdf) 1500 mm kanat açıklığı / 1080 mm gövde uzunluğu sınıfı referans alındı; marka modeli veya çizimi kopyalanmadı.
-- `src/scene/Vehicles.tsx`: özgün kodla oluşturulmuş quad, helikopter ve EDF jet görselleri; hareketli rotorlar. Ayrıntılı lisanslı 3D modeller ve gerçek materyal/livery çalışması sonraki aşamadır.
-- `src/scene/Airfield.tsx`: dokulu pist, hangar, rüzgâr tulumu, ağaçlar, ufuk tepeleri ve beş renk/rüzgâr teması. Beş saha henüz ayrı coğrafi veriler veya gerçek havaalanları değildir.
-- `src/main.tsx`: kamera, hava hızı/irtifa/yatış/burun açısı HUD'u, stall uyarısı, tam ekran ve kullanıcı arayüzü. Pilot kamerası sabit RC pilot görüşü, takip kamerası uçuşu öğrenme görüşü sağlar.
-- `src/cloud.ts`: Supabase bağlantısı; istemcide yalnızca publishable anahtar kullanılır. E-posta bağlantısıyla giriş ve kullanıcının açıkça seçtiği uçuşu kaydetme akışı `src/main.tsx` içindedir. Uçuş sırasında sürekli veritabanı yazımı yapılmaz.
-- `supabase/migrations`: profil ve eğitim uçuşları için RLS korumalı şema. FlightSimRC projesinde tablolar ve politikalar kurulmuş, iki tabloda da RLS açık olduğu kontrol edilmiştir.
+1. [FlightSimRC'yi aç](https://snansrin.github.io/flightsimrc/).
+2. Trainer 1500 ve Anadolu Eğitim Pisti ile başla. Klavyede **W/S gaz**, **yön tuşları ve A/D yatış**, **yukarı/aşağı burun**, **Q/E dümen**.
+3. USB RC kumandanı tak. **Kumanda ayarları** bölümünde bağlı cihazı seç, dört kanalı eşle ve her eksenin min/orta/maks değerini kaydet. Gaz sıfırdayken **Kumandayı etkinleştir**.
+4. Arkadaşınla uçmak için **Çok oyunculu → Yeni oda oluştur**. Davet bağlantısını paylaş; diğer pilot aynı bağlantıyla odaya katılsın. Oda en fazla dört pilot içindir.
 
-## Sonraki uygulama aşamaları
+### RadioLink T12D görünmüyorsa
 
-1. Trainer aerodinamiği ve çarpışmayı ölçümlerle doğrulama; JSBSim gibi referans FDM ile karşılaştırma, rüzgâr türbülansı, hasar ve uçuş tekrarı. [JSBSim kuvvet/moment yaklaşımı](https://jsbsim-team.github.io/jsbsim-reference-manual/user/concepts/forces-and-moments/) incelendi; bu prototipte henüz kullanılmıyor.
-2. Gerçek USB kumandalarla kalibrasyonun uçtan uca doğrulanması; otomatik eksen algılama, birden fazla aynı model cihaz ayrımı ve daha yönlendirmeli kalibrasyon akışı.
-3. Trainer, jet, drone ve helikopteri gerçek üretici/ölçüm verileriyle kalibre etme; helikopter collective/cyclic/rotor dinamiği, multikopter ESC/motor ve jet EDF gecikmesi. Planör ve akrobasi uçağı sonraki araçlardır.
-4. Beş ayrı arazi/pist, eğitim görevleri, ilerleme puanı ve erişilebilir arayüz.
-5. E-posta giriş akışını gerçek bir pilot hesabıyla uçtan uca doğrulama; görev ilerlemesi ve uçuş geçmişi ekranı. Service role veya secret anahtarı istemciye konmamalı.
-6. Colyseus ile ayrı otoriter oda sunucusu, durum senkronizasyonu, hız sınırları ve hile/uyumsuz sürüm önlemleri. Multiplayer henüz yoktur.
-7. Ayrı WebSocket hosting; dağıtım sonrası performans, mobil arayüz, gizlilik ve lisans kontrolleri.
+T12D'nin bilgisayarda oyun kumandası olarak görünmesi gerekir. [RadioLink'in T12D kılavuzu](https://radiolink.com/en/t12d_manual), dahili simülatör işlevi için uygun firmware gerektiğini söylüyor; [üreticinin SSS sayfası](https://www.radiolink.com/en/t12d_faq) Type-C ile dahili simülatör veya dongle kullanımını anlatıyor. Veri taşıyan USB-C kablosu ve üreticinin simülatör kipini kullan. Windows'ta **Win+R → joy.cpl** ile kumandanın ve hareket eden eksenlerin görünüp görünmediğini kontrol et. Windows'ta hiç oyun kumandası olarak görünmeyen bir cihazı web sayfası Gamepad API üzerinden otomatik tanıyamaz. Cihaz görünüyorsa sayfayı odaklayıp kumandada bir düğmeye bas veya kolu oynat; ardından ayarlarda **Cihazları yeniden tara**. Birden fazla joystick bağlıysa listeden T12D'yi seç.
+
+Site cihazın firmware'ini değiştirmez. Firmware işlemi gerekiyorsa yalnızca üreticinin modeline uygun resmi yönergesini kullan. T12D'nin farklı firmware ve bağlantı kipleri gerçek donanımla henüz uçtan uca doğrulanmadı.
+
+## Neler çalışıyor?
+
+| Alan | Mevcut durum |
+| --- | --- |
+| Uçuş | 60 Hz sabit adımlı trainer/jet kuvvet modeli; ayrı stabilize drone ve helikopter davranışı; stall, rüzgâr ve yer teması |
+| Görsel | Kodla oluşturulmuş dört araç, dokulu pist, hangar, HDR gökyüzü, HUD, takip ve sabit pilot kamerası |
+| Kumanda | Gamepad API, cihaz seçimi, cihaz bazlı profil, eksen eşleme, tersleme, ölü bölge, expo, min/orta/maks kalibrasyonu, sıfır gaz güvenlik adımı |
+| Canlı oda | Supabase Realtime ile oda kodu, pilot varlığı, yaklaşık 5 Hz konum paylaşımı ve diğer araçların sahnede gösterimi |
+| Hesap | Supabase e-posta bağlantısıyla giriş ve kullanıcının açıkça seçtiği uçuş kaydı |
+| Yayın | Her `main` güncellemesinde GitHub Actions test/derleme ve GitHub Pages yayını |
+
+Beş uçuş alanı şu an farklı hava/renk temalarıdır; beş ayrı gerçek coğrafi saha değildir. Çok oyunculu odalar herkese açık Realtime kanallarıdır: davet bağlantısını bilen biri konumları görebilir. Kullanıcı e-postası veya hesap kimliği canlı konum paketine konmaz. Bu serbest uçuş sürümünde yetkili sunucu, çarpışma mutabakatı, yarış hakemliği ve hile önleme yoktur.
+
+## Yerel geliştirme
+
+Node.js 22 ile `npm ci`, ardından `npm run dev`. `.env.example` dosyasını `.env.local` olarak kopyalayıp Supabase proje URL'si ve **publishable** anahtarını gir. Gizli/secret anahtarı tarayıcı koduna koyma. Testler: `npm test`; üretim derlemesi: `npm run build`.
+
+Kodun ana parçaları: [uçuş fiziği](src/flight.ts), [araç dinamikleri](src/vehicles.ts), [kumanda girişi](src/input.ts), [çok oyunculu iletişim](src/multiplayer.ts), [3B sahne](src/scene), [arayüz](src/main.tsx), [RLS şeması](supabase/migrations/0001_initial.sql). [Uçuş modelinin dayanakları ve sınırları](docs/flight-model.md) ayrıca belgelenmiştir.
+
+## Geliştirme doğrulaması ve sınırlar
+
+Otomatik testler kalkış, süzülme, stall, dönüş toparlanması, iniş, girdi dönüşümü ve ağ paketi doğrulamasını kapsar. Gerçek T12D, model uçak ve ağ gecikmesiyle uçtan uca kullanım ayrıca ölçülmelidir. Fizik katsayıları üretici verisi değildir; eğitim sonucunu resmî pilot sertifikası olarak sunmuyoruz.
+
+Öncelikli sonraki işler: somut RC trainer verisiyle fizik kalibrasyonu; T12D ve diğer kumandalarla donanım testleri; beş ayrı saha; görev/puanlama ve uçuş analizi; yetkili Colyseus sunucusuyla daha tutarlı ve güvenli çok oyunculu oturumlar.
 
 ## Lisans ve kaynaklar
 
-Bu depodaki özgün kod MIT lisanslıdır. Paketler ve yerel CC0 sahne dokularının kaynakları [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasında listelenir. Harici 3D model, ses veya uzaktan yüklenen yazı tipi kullanılmaz. Yeni varlık eklenmeden önce kullanım ve dağıtım izni doğrulanmalıdır.
+Özgün kod [MIT lisanslıdır](LICENSE). Dokuların, gökyüzünün ve paketlerin kaynakları [üçüncü taraf bildirimlerinde](THIRD_PARTY_NOTICES.md) listelenir. Realtime ve Gamepad uygulaması için [Supabase Broadcast](https://supabase.com/docs/guides/realtime/broadcast), [Presence](https://supabase.com/docs/guides/realtime/presence) ve [MDN Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API) belgeleri temel alınmıştır.
 
-Ücretsiz Supabase projesi ayrı FlightSimRC kuruluşunda oluşturuldu. Proje bölgesi Singapur'dur; Türkiye kullanıcıları için gecikme ölçülmeli. GitHub Pages ana yayın adresi `https://snansrin.github.io/flightsimrc/` olacaktır. GitHub Actions için `VITE_SUPABASE_URL` ve `VITE_SUPABASE_PUBLISHABLE_KEY` adlı depo değişkenleri ayarlanmıştır. E-posta girişini kullanıcı hesabıyla canlıda denemeden tamamlanmış saymayın.
-
-Teknik kararlar için birincil kaynaklar: [Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API), [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [Colyseus](https://docs.colyseus.io/), [Three.js](https://threejs.org/), [React Three Fiber](https://r3f.docs.pmnd.rs/). Gerçek RC eğitiminin güvenlik ve yerel mevzuat koşulları ayrıca doğrulanmalıdır.
+Arama motorları için site başlığı, açıklaması, canonical adresi ve [site haritası](https://snansrin.github.io/flightsimrc/sitemap.xml) eklenmiştir. Bu, Google'da görünmeyi garanti etmez; indeksleme Google'ın tarama ve değerlendirmesine bağlıdır.

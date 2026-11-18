@@ -1,0 +1,19 @@
+import { describe, expect, it } from 'vitest'
+import { normalizeRoomCode, parsePilot } from './multiplayer'
+
+const pilot = { id: '123e4567-e89b-42d3-a456-426614174000', vehicle: 'trainer', field: 0, position: [1, 2, 3], yaw: .2, pitch: .1, roll: 0 }
+
+describe('multiplayer packet boundary', () => {
+  it('normalizes invite codes', () => {
+    expect(normalizeRoomCode('ab-c 1234!!')).toBe('ABC1234')
+  })
+  it('accepts a finite aircraft pose', () => {
+    expect(parsePilot(pilot)).toMatchObject(pilot)
+  })
+  it('rejects malformed and extreme packets', () => {
+    expect(parsePilot({ ...pilot, position: [0, Infinity, 0] })).toBeNull()
+    expect(parsePilot({ ...pilot, position: [0, 20000, 0] })).toBeNull()
+    expect(parsePilot({ ...pilot, vehicle: 'unknown' })).toBeNull()
+    expect(parsePilot({ ...pilot, field: 7 })).toBeNull()
+  })
+})
