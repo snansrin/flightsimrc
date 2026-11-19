@@ -73,7 +73,7 @@ function App() {
   const keys = useRef(new Set<string>())
   const [hud, setHud] = useState(toDisplayFlight(simulation.current))
   const [fieldIndex, setFieldIndex] = useState(0)
-  const [deckVisible, setDeckVisible] = useState(true)
+  const [deckVisible, setDeckVisible] = useState(false)
   const [navTarget, setNavTarget] = useState<NavTarget>('runway')
   const [course, setCourse] = useState(0)
   const [assistMode, setAssistMode] = useState('model')
@@ -107,7 +107,7 @@ function App() {
   const detectButtonsBaseline = useRef<number[]>([])
   const [paused, setPaused] = useState(false)
   const [cameraMode, setCameraMode] = useState<CameraMode>('chase')
-  const [cameraZoom, setCameraZoom] = useState(1)
+  const [cameraZoom, setCameraZoom] = useState(1.15)
   const [showSettings, setShowSettings] = useState(false)
   const [showRoom, setShowRoom] = useState(false)
   const [roomInput, setRoomInput] = useState(() => normalizeRoomCode(new URLSearchParams(location.search).get('room') || ''))
@@ -638,7 +638,6 @@ function App() {
           <small>{lessonHud.status === 'active' ? Math.ceil(Math.max(0, lessonHud.lesson.timeout - lessonHud.elapsed)) + ' sn kaldı' : lessonHud.message}</small>
         </div>}
       </div>
-      {deckVisible && <FlightDeck flight={hud} field={field} course={course} onCourseChange={setCourse} target={navTarget} onTargetChange={setNavTarget} />}
       <div className="toolbar">
         <label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value; setVehicle(next); reset(next) }}>
           {hangar.map(({ id, spec }) => <option key={id} value={id}>{spec.name} · {spec.category}</option>)}
@@ -659,17 +658,18 @@ function App() {
           {assistProfiles.map((profile, index) => <option key={index} value={String(index)}>{profile.label}</option>)}
         </select></label>
         <div>
-          <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'Göstergeleri gizle' : 'ADI / HSI aç'}</button>
+          <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'ADI / HSI kapat' : 'ADI / HSI göster'}</button>
           <label className="camera-choice">GÖRÜŞ <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}>
             <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option>
           </select></label>
-          <label className="camera-zoom">YAKINLIK <input type="range" min="0.6" max="2.4" step="0.1" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label>
+          <label className="camera-zoom">YAKINLIK <input type="range" min="0.65" max="2.2" step="0.05" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label>
           <button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>Tam ekran</button>
           <button onClick={() => void toggleSound()}>{soundOn ? 'Sesi kapat' : 'Sesi aç'}</button>
           <button onClick={e => { setPaused(!paused); e.currentTarget.blur() }}>{paused ? 'Devam et' : 'Duraklat'}</button>
           <button onClick={e => { retry(); e.currentTarget.blur() }}>{lessonHud ? 'Dersi yeniden başlat' : 'Uçağı sıfırla'}</button>
         </div>
       </div>
+      {deckVisible && <FlightDeck flight={hud} field={field} course={course} onCourseChange={setCourse} target={navTarget} onTargetChange={setNavTarget} />}
     </section>
     <section className="academy" aria-labelledby="school-title">
       <div className="school-card">
