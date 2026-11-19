@@ -93,6 +93,7 @@ function App() {
   const activeDevice = useRef('')
   const deviceProfileId = useRef('')
   const [controllerArmed, setControllerArmed] = useState(false)
+  const [throttleReverseOverride, setThrottleReverseOverride] = useState<boolean | null>(null)
   const [controllerMessage, setControllerMessage] = useState('')
   const [detectKey, setDetectKey] = useState<AxisKey | `aux:${number}` | null>(null)
   const detectBaseline = useRef<number[]>([])
@@ -223,6 +224,7 @@ function App() {
         setDetectKey(null)
         activeDevice.current = deviceKey
         deviceProfileId.current = pad?.id ?? ''
+        setThrottleReverseOverride(null)
         setControllerArmed(false)
         if (pad) setControllerMessage('Kumanda algılandı. Uçuşa başlamak için ⚙ Kumanda ayarları bölümünden kumandayı etkinleştir; kalibrasyon isteğe bağlıdır.')
         const prefix = `flight-device:${deviceProfileId.current}:`
@@ -251,6 +253,8 @@ function App() {
             const savedMapping = JSON.parse(localStorage.getItem(prefix + 'mapping') || 'null')
             const savedTuning = JSON.parse(localStorage.getItem(prefix + 'tuning') || 'null')
             const savedCalibration = JSON.parse(localStorage.getItem(prefix + 'calibration') || '{}')
+            const savedReverse = JSON.parse(localStorage.getItem(prefix + 'throttleReverseOverride') || 'null')
+            setThrottleReverseOverride(typeof savedReverse === 'boolean' ? savedReverse : null)
             setMapping(Object.fromEntries((Object.keys(defaults.mapping) as AxisKey[]).map(key => [key, normalizeSource(savedMapping?.[key], baseMapping[key])])) as Mapping)
             const savedAuxiliary = JSON.parse(localStorage.getItem(prefix + 'auxiliary') || 'null')
             setAuxiliary(defaultAux.map((source, index) => normalizeSource(savedAuxiliary?.[index], source)))
@@ -342,7 +346,32 @@ function App() {
     setDetectKey(key)
     setControllerMessage(`${key} kolunu şimdi tam aralıkta hareket ettir.`)
   }
-  const updateTuning = (next: InputTuning) => { setControllerArmed(false); setTuning(next); saveDeviceSetting('tuning', next) }
+  const updateTuning = (next: InputTuning) => { setTuning(next); saveDeviceSetting('tuning', next) }
+  const updateReverse = (key: AxisKey, reversed: boolean) => {
+    const next = { ...tuning, reversed: { ...tuning.reversed, [key]: reversed } }
+    setTuning(next)
+    saveDeviceSetting('tuning', next)
+    if (key === 'throttle') {
+      // Switching throttle polarity while armed can jump instantly to 100% throttle.
+      // Require a new zero-throttle check before resuming.
+      setThrottleReverseOverride(reversed)
+      saveDeviceSetting('throttleReverseOverride', reversed)
+      setControllerArmed(false)
+      controls.current = { ...zero }
+      setPaused(true)
+      setControllerMessage('Gaz yönü değiştirildi. Güvenlik için kumanda durduruldu. Gazı yeni rölanti ucuna indirip Kalibrasyonsuz uçuşa başla düğmesine bas.')
+    } else {
+      setControllerMessage(`${key} ters yönü ${reversed ? 'açıldı' : 'kapatıldı'}. Yeni yön anında uygulanır; kumanda etkinse Ayarları kaydet ve uçuşa dön düğmesine bas.`)
+    }
+  }
+  const resetThrottleReverse = () => {
+    setThrottleReverseOverride(null)
+    saveDeviceSetting('throttleReverseOverride', null)
+    setControllerArmed(false)
+    controls.current = { ...zero }
+    setPaused(true)
+    setControllerMessage('Gaz ters yönü otomatik moda alındı. Gazı rölantiye indirip Kalibrasyonsuz uçuşa başla düğmesine bas.')
+  }
   const captureCalibration = (key: AxisKey, point: 'min' | 'center' | 'max') => {
     const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex)
     const raw = pad ? readSource(pad, mapping[key]) : undefined
@@ -362,9 +391,7 @@ function App() {
     setCalibration(next); saveDeviceSetting('calibration', next)
     manualCalibrationDraft.current[key] = {}
     setControllerArmed(false)
-    const nextTuning = { ...tuning, reversed: { ...tuning.reversed, [key]: false } }
-    setTuning(nextTuning); saveDeviceSetting('tuning', nextTuning)
-    setControllerMessage(`${key} kalibrasyonu kaydedildi. Gaz yönünü ve rölantiyi kontrol et.`)
+    setControllerMessage(`${key} kalibrasyonu kaydedildi. Ters yön tercihin korundu; gaz yönünü ve rölantiyi kontrol et.`)
   }
   const updateAuxiliary = (index: number, source: InputSource) => {
     const next = [...auxiliary]; next[index] = source; setAuxiliary(next); saveDeviceSetting('auxiliary', next)
@@ -407,7 +434,7 @@ function App() {
   const startWithoutCalibration = () => {
     const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex)
     if (!pad) { setControllerMessage('Uçuş için bağlı kumanda bulunamadı. USB cihazını seç veya HID bağlantısını dene.'); return }
-    const prepared = prepareQuickFlight(pad, mapping, tuning)
+    const prepared = prepareQuickFlight(pad, mapping, tuning, throttleReverseOverride)
     if (!prepared.ok) {
       setControllerArmed(false)
       setControllerMessage(prepared.message)
@@ -486,8 +513,7 @@ function App() {
     setAuxiliary(auxiliary)
     setAuxReversed(auxiliary.map(() => false))
     setAuxCalibration(auxiliary.map(() => undefined))
-    const nextTuning = { ...tuning, reversed: { aileron: false, elevator: false, throttle: false, rudder: false } }
-    setTuning(nextTuning); saveDeviceSetting('tuning', nextTuning)
+    // Guided calibration must not silently reset the user's 'Ters' switches.
     saveDeviceSetting('mapping', profile.mapping)
     saveDeviceSetting('calibration', profile.calibration)
     saveDeviceSetting('auxiliary', auxiliary)
@@ -564,6 +590,9 @@ function App() {
   const signal = axisSignalSummary(padAxes, axisTravel)
   const movedAxes = signal.moving
   const t12d = /t12d/i.test(padName)
+  const livePreview = padAxes.length || padButtons.length
+    ? gamepadControls({ axes: padAxes, buttons: padButtons.map(value => ({ value })) } as unknown as Gamepad, mapping, tuning, calibration)
+    : null
   const field = fields[fieldIndex]
   const aircraft = hangarAircraft(vehicle)
   const speed = hud.airspeed
@@ -705,7 +734,7 @@ function App() {
         <button type="button" disabled={padAxes.filter(Number.isFinite).length < 4} onClick={advanceSetup}>İsteğe bağlı rehberli kalibrasyon</button>
         <button type="button" onClick={startWithoutCalibration}>Gaz rölantideyse kalibrasyonsuz uç</button>
       </>}
-    </div><p className="muted">Tarayıcı bu cihazda {padAxes.length} eksen ve {padButtons.length} düğme bildiriyor. Panel, tarayıcının sunduğu {padAxes.length + padButtons.length} girdi için oluşur. Her girdi ayrı eşlenebilir.</p>{(Object.keys(mapping) as AxisKey[]).slice(0, Math.min(4, padAxes.length + padButtons.length)).map((key, index) => <div className="axis" key={key}><label htmlFor={`axis-${key}`}>{`Kanal ${index + 1} · ${key}`}</label><select id={`axis-${key}`} value={mapping[key]} onChange={e => updateMapping(key, e.target.value as InputSource)}>{sourceOptions(mapping[key])}</select><label className="reverse"><input type="checkbox" checked={tuning.reversed[key]} onChange={e => updateTuning({ ...tuning, reversed: { ...tuning.reversed, [key]: e.target.checked } })} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(key)}>{detectKey === key ? 'Kolu oynat…' : 'Ekseni bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'max')}>Maks</button></div></div>)}{auxiliary.map((source, index) => <div className="axis" key={index}><label htmlFor={`aux-${index}`}>Kanal {index + 5} · yardımcı</label><select id={`aux-${index}`} value={source} onChange={e => updateAuxiliary(index, e.target.value as InputSource)}>{sourceOptions(source)}</select><label className="reverse"><input type="checkbox" checked={auxReversed[index]} onChange={e => { const next = [...auxReversed]; next[index] = e.target.checked; setAuxReversed(next); saveDeviceSetting('auxReversed', next) }} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(`aux:${index}`)}>{detectKey === `aux:${index}` ? 'Kolu oynat…' : 'Kanalı bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'max')}>Maks</button></div><small className="channel-value">{(() => { const raw = source.startsWith('axis:') ? padAxes[Number(source.slice(5))] : padButtons[Number(source.slice(7))] * 2 - 1; if (!Number.isFinite(raw)) return 'Girdi yok'; const range = auxCalibration[index]; const calibrated = calibrateAxis(raw, range); return `${((auxReversed[index] ? -1 : 1) * calibrated).toFixed(2)}` })()}</small></div>)}<label className="tuning">Ölü bölge {Math.round(tuning.deadzone * 100)}%<input type="range" min="0" max="0.2" step="0.01" value={tuning.deadzone} onChange={e => updateTuning({ ...tuning, deadzone: Number(e.target.value) })} /></label><label className="tuning">Expo {Math.round(tuning.expo * 100)}%<input type="range" min="0" max="0.8" step="0.05" value={tuning.expo} onChange={e => updateTuning({ ...tuning, expo: Number(e.target.value) })} /></label>{(['aileron', 'elevator', 'rudder'] as const).map(key => <label className="tuning" key={key}>{key} hızı · {Math.round((tuning.rates?.[key] ?? 1) * 100)}%<input type="range" min="0.5" max="2" step="0.05" value={tuning.rates?.[key] ?? 1} onChange={e => updateTuning({ ...tuning, rates: { ...defaultTuning.rates, ...tuning.rates, [key]: Number(e.target.value) } })} /></label>)}<button className="account-action" type="button" disabled={(!padAxes.length && !padButtons.length) || controllerArmed || Boolean(setup)} onClick={armController}>{controllerArmed ? 'Kumanda hazır' : 'Kumandayı etkinleştir'}</button>{controllerMessage && <p role="status">{controllerMessage}</p>}<p className="muted">İlk dört girdi uçuşu kontrol eder; sonraki girdiler izleme ve profil ayarları içindir. Kalibrasyon isteğe bağlıdır. Hızlı uçuş gaz yönünü rölanti konumundan güvenli biçimde belirler. Elle kalibrasyonda Min, Orta ve Maks konumlarının tümünü kaydetmeden değerler uygulanmaz. Gaz ekseninde Orta için kolu yarıya getir. Ayarlar cihaza özel saklanır; uçuşa geçmeden önce gaz yönünü ve sıfır gazı kontrol et.</p></aside></div>}
+    </div><p className="muted">Tarayıcı bu cihazda {padAxes.length} eksen ve {padButtons.length} düğme bildiriyor. Panel, tarayıcının sunduğu {padAxes.length + padButtons.length} girdi için oluşur. Her girdi ayrı eşlenebilir.</p>{(Object.keys(mapping) as AxisKey[]).slice(0, Math.min(4, padAxes.length + padButtons.length)).map((key, index) => <div className="axis" key={key}><label htmlFor={`axis-${key}`}>{`Kanal ${index + 1} · ${key}`}</label><select id={`axis-${key}`} value={mapping[key]} onChange={e => updateMapping(key, e.target.value as InputSource)}>{sourceOptions(mapping[key])}</select><label className="reverse"><input type="checkbox" checked={tuning.reversed[key]} onChange={e => updateReverse(key, e.target.checked)} /> Ters</label><div className="calibration"><small className="channel-value" aria-live="off">{livePreview ? (key === 'throttle' ? `Çıkış %${Math.round(livePreview.throttle * 100)}` : `Çıkış ${livePreview[key].toFixed(2)}`) : 'Girdi bekleniyor'}</small><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(key)}>{detectKey === key ? 'Kolu oynat…' : 'Ekseni bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'max')}>Maks</button></div></div>)}{auxiliary.map((source, index) => <div className="axis" key={index}><label htmlFor={`aux-${index}`}>Kanal {index + 5} · yardımcı</label><select id={`aux-${index}`} value={source} onChange={e => updateAuxiliary(index, e.target.value as InputSource)}>{sourceOptions(source)}</select><label className="reverse"><input type="checkbox" checked={auxReversed[index]} onChange={e => { const next = [...auxReversed]; next[index] = e.target.checked; setAuxReversed(next); saveDeviceSetting('auxReversed', next) }} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(`aux:${index}`)}>{detectKey === `aux:${index}` ? 'Kolu oynat…' : 'Kanalı bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'max')}>Maks</button></div><small className="channel-value">{(() => { const raw = source.startsWith('axis:') ? padAxes[Number(source.slice(5))] : padButtons[Number(source.slice(7))] * 2 - 1; if (!Number.isFinite(raw)) return 'Girdi yok'; const range = auxCalibration[index]; const calibrated = calibrateAxis(raw, range); return `${((auxReversed[index] ? -1 : 1) * calibrated).toFixed(2)}` })()}</small></div>)}<p className="muted">Ters kutusunu değiştirip çubuğu oynatarak “Çıkış” değerini kontrol et. Gaz ters yönü uçuş güvenliği için yeniden sıfır gaz kontrolü gerektirir.</p><button type="button" className="diagnostic-action" onClick={resetThrottleReverse}>Gaz yönünü otomatik belirle</button><label className="tuning">Ölü bölge {Math.round(tuning.deadzone * 100)}%<input type="range" min="0" max="0.2" step="0.01" value={tuning.deadzone} onChange={e => updateTuning({ ...tuning, deadzone: Number(e.target.value) })} /></label><label className="tuning">Expo {Math.round(tuning.expo * 100)}%<input type="range" min="0" max="0.8" step="0.05" value={tuning.expo} onChange={e => updateTuning({ ...tuning, expo: Number(e.target.value) })} /></label>{(['aileron', 'elevator', 'rudder'] as const).map(key => <label className="tuning" key={key}>{key} hızı · {Math.round((tuning.rates?.[key] ?? 1) * 100)}%<input type="range" min="0.5" max="2" step="0.05" value={tuning.rates?.[key] ?? 1} onChange={e => updateTuning({ ...tuning, rates: { ...defaultTuning.rates, ...tuning.rates, [key]: Number(e.target.value) } })} /></label>)}<button className="account-action" type="button" disabled={(!padAxes.length && !padButtons.length) || controllerArmed || Boolean(setup)} onClick={armController}>{controllerArmed ? 'Kumanda hazır' : 'Kumandayı etkinleştir'}</button>{controllerArmed && <button type="button" className="account-action" onClick={() => { setShowSettings(false); setPaused(false) }}>Ayarları kaydet ve uçuşa dön</button>}{controllerMessage && <p role="status">{controllerMessage}</p>}<p className="muted">İlk dört girdi uçuşu kontrol eder; sonraki girdiler izleme ve profil ayarları içindir. Kalibrasyon isteğe bağlıdır. Hızlı uçuş gaz yönünü rölanti konumundan güvenli biçimde belirler. Elle kalibrasyonda Min, Orta ve Maks konumlarının tümünü kaydetmeden değerler uygulanmaz. Gaz ekseninde Orta için kolu yarıya getir. Ayarlar cihaza özel saklanır; uçuşa geçmeden önce gaz yönünü ve sıfır gazı kontrol et.</p></aside></div>}
   </main>
 }
 createRoot(document.getElementById('root')!).render(<App />)
