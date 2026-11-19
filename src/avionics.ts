@@ -56,6 +56,7 @@ export function navigationReadout(flight: FlightState, field: Field, selectedCou
   const groundspeed = Math.hypot(flight.velocity[0], flight.velocity[2])
   const track = groundspeed < 0.5 ? null : wrapHeading(Math.atan2(flight.velocity[0], flight.velocity[2]) * DEG)
   const distanceMeters = Math.hypot(dx, dz)
+  const closingSpeed = distanceMeters > 0.5 ? (flight.velocity[0] * dx + flight.velocity[2] * dz) / distanceMeters : 0
   // Signed lateral displacement from a line THROUGH THE FIX, oriented at selected course.
   // Positive means aircraft is right of the course; CDI needle moves left.
   const offsetX = flight.position[0] - waypoint.x
@@ -66,7 +67,7 @@ export function navigationReadout(flight: FlightState, field: Field, selectedCou
   return {
     heading, track, bearing, relativeBearing, course, courseRelative, cdi, crossTrackMeters,
     distanceMeters, groundspeed,
-    etaSeconds: groundspeed > 1.5 ? distanceMeters / groundspeed : null,
+    etaSeconds: closingSpeed > 1.5 ? distanceMeters / closingSpeed : null,
     toFrom: along >= 0 ? 'TO' : 'FROM', waypoint,
   }
 }
