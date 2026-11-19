@@ -437,3 +437,103 @@ body {
   .deck-instrument-title { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .flight-deck * { scroll-behavior: auto; } }
+
+/* Flight-first layout: aircraft/runway visibility always outranks instrument cards. */
+main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
+.sim { margin-top: 12px; }
+.viewport {
+  height: clamp(480px, 74vh, 840px);
+  min-height: 480px;
+}
+.simtop { padding: 10px 16px; }
+.toolbar { padding: 10px 12px; gap: 7px; }
+.toolbar label { flex-basis: 190px; gap: 7px; letter-spacing: .7px; }
+.toolbar .assist-choice { flex-basis: 185px; }
+.toolbar > div { flex-basis: auto; justify-content: flex-end; }
+.toolbar > div button { padding: 8px 11px; }
+.field-map { width: 112px; top: 12px; right: 12px; }
+.attitude { top: 134px; right: 12px; }
+.scene-label { top: 12px; left: 12px; padding: 8px 10px; }
+.hud { left: 12px; bottom: 12px; }
+.hud div { min-width: 82px; padding: 7px 11px; }
+.hud strong { font-size: 23px; }
+
+/* Optional ADI/HSI panel is deliberately compact and placed AFTER flight controls. */
+.flight-deck {
+  grid-template-columns: minmax(180px, .85fr) minmax(340px, 1.65fr) minmax(200px, 1fr);
+  align-items: stretch;
+  gap: 9px;
+  padding: 9px;
+}
+.deck-instrument { padding: 9px 11px; }
+.deck-instrument svg { width: min(100%, 156px); margin: 3px auto; }
+.deck-adi-readouts strong, .deck-nav-readouts strong { font-size: 13px; }
+.deck-adi-readouts span, .deck-nav-readouts span { font-size: 9px; }
+.deck-hsi {
+  display: grid;
+  grid-template-columns: minmax(132px, 175px) minmax(0, 1fr);
+  grid-template-rows: auto auto auto 1fr;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+.deck-hsi .deck-instrument-title { grid-column: 1 / -1; grid-row: 1; }
+.deck-hsi svg { grid-column: 1; grid-row: 2 / 4; width: min(100%, 165px); margin: 0; align-self: center; }
+.deck-hsi .deck-nav-readouts {
+  grid-column: 2; grid-row: 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  border-top: 0;
+  padding: 0;
+  align-content: center;
+}
+.deck-hsi .deck-course-chooser { grid-column: 2; grid-row: 3; padding: 2px 0 0; gap: 5px; }
+.deck-hsi .deck-nav-status { grid-column: 1 / -1; grid-row: 4; margin: 0; align-self: end; }
+.deck-course-chooser select { padding: 5px; max-width: 180px; font-size: 11px; }
+.deck-course-buttons button { padding: 5px 7px; font-size: 10px; }
+.deck-side-data { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.deck-metric { padding: 9px; }
+.deck-metric strong { font-size: 21px; }
+.deck-disclaimer { grid-column: 1 / -1; }
+
+@media (max-width: 1180px) {
+  .flight-deck { grid-template-columns: minmax(180px, .9fr) minmax(340px, 1.7fr); }
+  .deck-side-data { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .deck-disclaimer { grid-column: 1 / -1; }
+  .toolbar > div { flex-basis: 100%; }
+}
+@media (max-width: 780px) {
+  .viewport { height: 73vh; height: 73svh; min-height: 420px; max-height: 780px; }
+  .simtop { padding: 9px 12px; }
+  .field-map { top: 8px; right: 8px; width: 88px; }
+  .attitude { top: 106px; right: 8px; }
+  .hud { bottom: 7px; left: 7px; gap: 3px; }
+  .hud div { min-width: 60px; padding: 5px 6px; }
+  .hud strong { font-size: 19px; }
+  .toolbar { padding: 9px; }
+  .toolbar > div { gap: 5px; }
+  .flight-deck {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(260px, 85%);
+    grid-template-columns: none;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    padding: 9px;
+  }
+  .flight-deck > .deck-instrument { scroll-snap-align: start; }
+  .flight-deck .deck-side-data { display: none; }
+  .deck-hsi { display: block; }
+  .deck-hsi svg { display: block; width: 128px; margin: 0 auto; }
+  .deck-hsi .deck-nav-readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #3a5d6b; padding-top: 5px; }
+  .deck-hsi .deck-course-chooser { padding-top: 6px; }
+}
+@media (max-width: 480px) {
+  main { padding-inline: 8px; }
+  .viewport { min-height: 410px; height: 71svh; }
+  .hud small { font-size: 7px; letter-spacing: .3px; }
+  .hud strong { font-size: 18px; }
+  .hud div { min-width: 57px; }
+  .simtop { letter-spacing: .3px; font-size: 10px; }
+}
+/* Full-screen flight mode is reserved for the 3D scene; instruments can be expanded after exit. */
+.sim:fullscreen .flight-deck, .sim:fullscreen .deck-toggle { display: none; }

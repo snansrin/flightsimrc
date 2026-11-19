@@ -8,6 +8,7 @@ import type { Field } from '../sim/fields'
 import { Airfield, airfieldPilotPosition } from './Airfield'
 import { VehicleModel } from './Vehicles'
 import { RemoteAircraft } from './RemoteAircraft'
+import { chaseFraming } from './cameraFraming'
 
 export type CameraMode = 'chase' | 'pilot' | 'onboard'
 function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; cameraMode: CameraMode; zoom: number; vehicle: string; field: Field }) {
@@ -24,7 +25,8 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
     if (!ref.current) return
     ref.current.position.set(...s.position)
     ref.current.rotation.set(-s.pitch, s.yaw, -s.roll, 'YXZ')
-    const chaseDistance = Math.max(1.35, aircraft.span * 2.1) * zoom
+    const chase = chaseFraming(aircraft.span, zoom)
+    const chaseDistance = chase.distance
     const chaseHeight = isRotor ? .65 + aircraft.span * .35 : 1.1
     const { attitude, desired, target, forward } = vectors
     attitude.set(-s.pitch, s.yaw, -s.roll, 'YXZ')
@@ -41,7 +43,7 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
       camera.lookAt(target.set(...s.position).addScaledVector(forward, cameraMode === 'pilot' ? 0 : .45))
     }
     if (camera instanceof THREE.PerspectiveCamera) {
-      const fov = cameraMode === 'pilot' ? 58 / zoom : cameraMode === 'onboard' ? THREE.MathUtils.clamp(75 / zoom, 40, 100) : 58
+      const fov = cameraMode === 'pilot' ? 58 / zoom : cameraMode === 'onboard' ? THREE.MathUtils.clamp(75 / zoom, 40, 100) : chase.fov
       if (Math.abs(camera.fov - fov) > .01) { camera.fov = fov; camera.updateProjectionMatrix() }
     }
   })
