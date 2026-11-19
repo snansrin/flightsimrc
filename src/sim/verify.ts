@@ -1,6 +1,6 @@
 import { GRAVITY } from './atmosphere'
 import { stallSpeed } from './aero'
-import { aircraftById } from './catalog'
+import { aircraftById, aircraftIds } from './catalog'
 import { attitudeEuler, clamp, deg, rad } from './math'
 import { Simulation } from './simulation'
 import { zeroControls, type AircraftSpec, type Controls } from './types'
@@ -9,7 +9,7 @@ import { hoverThrottle } from './rotor'
 /**
  * Automated flight-test harness. Every scenario flies the real physics model with
  * scripted inputs and reports measured numbers against analytical targets.
- * Used by unit tests, by `npm run verify` and by the in-app diagnostics panel.
+ * Used by the automated flight verification scenarios.
  */
 
 export type Measurement = {
@@ -283,8 +283,7 @@ export function verifyAirframe(id: string): Measurement[] {
 }
 
 export function verifyAll(): Measurement[] {
-  return ['trainer1500', 'cub800', 'extra330', 'warbird1400', 'edf90', 'glider2000', 'wing1000', 'float1200', 'quad5', 'cinedrone', 'heli500']
-    .flatMap(id => verifyAirframe(id))
+  return aircraftIds.flatMap(id => verifyAirframe(id))
 }
 
 export const formatMeasurements = (rows: Measurement[]): string => rows.map(r =>

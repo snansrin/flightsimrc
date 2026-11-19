@@ -2,8 +2,9 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Controls } from '../flight'
-import type { VehicleKind } from '../vehicles'
+import { hangarAircraft } from '../hangar'
 import { Trainer } from './Trainer'
+import { FixedWing } from './FixedWing'
 
 function Rotor({ position, radius, throttle, vertical = false }: { position: [number, number, number]; radius: number; throttle: React.MutableRefObject<Controls>; vertical?: boolean }) {
   const spin = useRef<THREE.Group>(null)
@@ -71,9 +72,11 @@ function Jet() {
   </group>
 }
 
-export function VehicleModel({ kind, controls }: { kind: VehicleKind; controls: React.MutableRefObject<Controls> }) {
+export function VehicleModel({ kind, controls }: { kind: string; controls: React.MutableRefObject<Controls> }) {
   if (kind === 'drone') return <Drone controls={controls} />
   if (kind === 'helicopter') return <Helicopter controls={controls} />
   if (kind === 'jet') return <Jet />
-  return <Trainer controls={controls} />
+  if (kind === 'trainer') return <Trainer controls={controls} />
+  if (kind === 'cinedrone') return <group scale={1.24}><Drone controls={controls} /></group>
+  return <FixedWing spec={hangarAircraft(kind)} controls={controls} />
 }

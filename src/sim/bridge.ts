@@ -4,20 +4,15 @@
  * The legacy scene faces +Z, while physics uses north = -Z; mirror that axis.
  */
 import type { Controls as DisplayControls, FlightState } from '../flight'
-import type { VehicleKind } from '../vehicles'
+import { hangarAircraft } from '../hangar'
 import { Simulation } from './simulation'
 import { fields } from './fields'
 import { zeroControls } from './types'
 
-export const physicsAircraft: Record<VehicleKind, string> = {
-  trainer: 'trainer1500', drone: 'quad5', helicopter: 'heli500', jet: 'edf90',
-}
+export const physicsFieldId = (sceneIndex: number): string => (fields[sceneIndex] ?? fields[0]).id
 
-/** Only the first five scene configurations have corresponding scene artwork. */
-export const physicsFieldId = (sceneIndex: number): string => fields[Math.max(0, Math.min(4, sceneIndex))].id
-
-export const newFlightSimulation = (kind: VehicleKind, sceneIndex = 0): Simulation => new Simulation({
-  aircraft: physicsAircraft[kind], field: physicsFieldId(sceneIndex),
+export const newFlightSimulation = (kind: string, sceneIndex = 0): Simulation => new Simulation({
+  aircraft: hangarAircraft(kind).id, field: physicsFieldId(sceneIndex),
 })
 
 export function toDisplayFlight(sim: Simulation): FlightState {

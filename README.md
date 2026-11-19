@@ -6,12 +6,15 @@
 
 FlightSimRC; model uçak, drone, helikopter ve EDF jet kontrolünü öğrenmek için geliştirilen açık kaynaklı bir web simülatörüdür. Klavye veya tarayıcının tanıdığı USB kumandayla uçabilir, kumanda eksenlerini eşleyip kalibre edebilir, pist ve rüzgâr koşullarını seçebilir, aynı oda koduyla arkadaşlarınızın araçlarını canlı sahnede görebilirsiniz. Proje hâlâ gelişmektedir: uçuş katsayıları gerçek araç ölçümleriyle doğrulanmış değildir ve çok oyunculu sürüm serbest uçuş içindir.
 
+[Motor mimarisi ve kabul ölçütleri](docs/motor-mimarisi.md)
+
 ## Hemen dene
 
 1. [FlightSimRC'yi aç](https://snansrin.github.io/flightsimrc/).
 2. Trainer 1500 ve Anadolu Eğitim Pisti ile başla. Klavyede **W/S gaz**, **yön tuşları ve A/D yatış**, **yukarı/aşağı burun**, **Q/E dümen**.
-3. USB RC kumandanı veya joystick'ini tak. **Kumanda ayarları** bütün bağlı cihazları ve her birinin eksen/düğme sayısını gösterir; otomatik seçimde ilk görünen cihaz kullanılır. Birden fazla cihaz bağlıysa listeden istediğini seç. Kanal paneli seçilen cihazın tarayıcıya sunduğu girdi sayısı kadar açılır; sabit 12 kanal sınırı yoktur. Her kanal için **Ekseni bul/Kanalı bul** düğmesine basıp ilgili kolu veya anahtarı hareket ettir; ardından fiziksel alt/orta/üst konumları kaydet. Ters uçlu eksenler de kalibre edilir. Gaz sıfırdayken **Kumandayı etkinleştir**. İlk dört kanal uçuşa bağlıdır; ek kanallar şimdilik izleme ve cihaz profili içindir. Bağlantı sorunu varsa **Kumanda tanı bilgisini kopyala** ile tarayıcının gördüğü cihazları ve canlı değerleri al.
+3. USB RC kumandanı veya joystick'ini tak ve bir kolu oynat. Tarayıcıda yalnızca bazı eksenler görünüyorsa **USB HID kumandası bağla** seçeneğini kullan. Cihazın ilk WebHID bağlantısında tarayıcı izin ister. **Rehberli kalibrasyon** dört ana kolu uç konumlarından tanır ve ayarları bu cihaza kaydeder. Gaz rölantideyken **Kumandayı etkinleştir**. Sorun yaşarsan **Kumanda tanı bilgisini kopyala** ile tarayıcının gördüğü canlı değerleri incele.
 4. Arkadaşınla uçmak için **Çok oyunculu** panelinde pilot adını yaz, istersen en az 8 karakterlik oda şifresi belirle ve **Yeni oda oluştur**. Davet bağlantısını paylaş; şifre koyduysan onu ayrıca ilet. Diğer pilot aynı kod ve şifreyle katılır. Pilot adları ve kurucu odada listelenir. Oda en fazla dört pilot içindir.
+5. **Uçuş okulu** bölümünden kalkış, dengeli uçuş, iniş veya hover seç. Ders ilerlemesi uçuş telemetrisiyle ölçülür.
 
 ### RadioLink T12D görünmüyorsa
 
@@ -35,16 +38,16 @@ Beş uçuş alanı farklı renk/hava koşullarına ek olarak kıyı, dağ, kumul
 
 Node.js 22 ile `npm ci`, ardından `npm run dev`. `.env.example` dosyasını `.env.local` olarak kopyalayıp Supabase proje URL'si ve **publishable** anahtarını gir. Gizli/secret anahtarı tarayıcı koduna koyma. Testler: `npm test`; üretim derlemesi: `npm run build`.
 
-Kodun ana parçaları: [uçuş fiziği](src/flight.ts), [araç dinamikleri](src/vehicles.ts), [kumanda girişi](src/input.ts), [çok oyunculu iletişim](src/multiplayer.ts), [3B sahne](src/scene), [arayüz](src/main.tsx), [RLS şeması](supabase/migrations/0001_initial.sql). [Uçuş modelinin dayanakları ve sınırları](docs/flight-model.md) ile [adım adım geliştirme yol haritası](docs/development-roadmap.md) ayrıca belgelenmiştir.
+Motor [simülasyon çekirdeği](src/sim/simulation.ts), [uçak kataloğu](src/sim/catalog.ts), [kumanda girişi](src/input.ts), [WebHID](src/hid.ts), [eğitim değerlendirmesi](src/school.ts), [3B sahne](src/scene) ve [çok oyunculu iletişim](src/multiplayer.ts) dosyalarına ayrılır.
 
 ## Geliştirme doğrulaması ve sınırlar
 
 Otomatik testler kalkış, süzülme, stall, dönüş toparlanması, iniş, girdi dönüşümü ve ağ paketi doğrulamasını kapsar. Gerçek T12D, model uçak ve ağ gecikmesiyle uçtan uca kullanım ayrıca ölçülmelidir. Fizik katsayıları üretici verisi değildir; eğitim sonucunu resmî pilot sertifikası olarak sunmuyoruz.
 
-Öncelikli sonraki işler: somut RC trainer verisiyle fizik kalibrasyonu; T12D ve diğer kumandalarla donanım testleri; beş ayrı saha; görev/puanlama ve uçuş analizi; yetkili Colyseus sunucusuyla daha tutarlı ve güvenli çok oyunculu oturumlar.
+Ölçüm gerektiren işler arasında gerçek RC uçaklarla stall, trim ve kalkış doğrulaması, farklı kumandalarda donanım testi ve lisanslı gerçek dünya arazi verisi yer alıyor.
 
 ## Lisans ve kaynaklar
 
 Özgün kod [MIT lisanslıdır](LICENSE). Dokuların, gökyüzünün ve paketlerin kaynakları [üçüncü taraf bildirimlerinde](THIRD_PARTY_NOTICES.md) listelenir. Realtime ve Gamepad uygulaması için [Supabase Broadcast](https://supabase.com/docs/guides/realtime/broadcast), [Presence](https://supabase.com/docs/guides/realtime/presence) ve [MDN Gamepad API](https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API/Using_the_Gamepad_API) belgeleri temel alınmıştır.
 
-Arama motorları için site başlığı, açıklaması, canonical adresi ve [site haritası](https://snansrin.github.io/flightsimrc/sitemap.xml) eklenmiştir. Bu, Google'da görünmeyi garanti etmez; indeksleme Google'ın tarama ve değerlendirmesine bağlıdır.
+Arama motorları için site başlığı, açıklaması, canonical adresi ve [site haritası](https://snansrin.github.io/flightsimrc/sitemap.xml) eklenmiştir.

@@ -139,7 +139,7 @@ export const fieldById = (id: string): Field => fields.find(f => f.id === id) ??
 export function startOnRunway(field: Field, offset = 6): { position: Vec3; heading: number } {
   const heading = (field.runway.heading * Math.PI) / 180
   const half = field.runway.length / 2 - offset
-  const x = field.runway.center[0] + Math.sin(heading) * half
+  const x = field.runway.center[0] - Math.sin(heading) * half
   const z = field.runway.center[1] + Math.cos(heading) * half
   const ground = field.height(x, z)
   return { position: [x, ground, z], heading }
@@ -147,7 +147,7 @@ export function startOnRunway(field: Field, offset = 6): { position: Vec3; headi
 
 export const runwayAxis = (field: Field): Vec3 => {
   const h = (field.runway.heading * Math.PI) / 180
-  return [-Math.sin(h), 0, -Math.cos(h)]
+  return [Math.sin(h), 0, -Math.cos(h)]
 }
 
 /** Ridge lift when wind blows against a slope; used by the glider lessons. */

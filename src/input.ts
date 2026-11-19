@@ -6,6 +6,25 @@ export type InputTuning = { reversed: Record<AxisKey, boolean>; deadzone: number
 export type AxisCalibration = { min: number; center: number; max: number }
 export type Calibration = Partial<Record<AxisKey, AxisCalibration>>
 export const defaultMapping: Mapping = { aileron: 'axis:0', elevator: 'axis:1', throttle: 'axis:2', rudder: 'axis:3' }
+export const flightChannels = [
+  { key: 'aileron', name: 'Yatış', positive: 'sağa', negative: 'sola' },
+  { key: 'elevator', name: 'İrtifa dümeni', positive: 'burnu kaldırma yönüne', negative: 'burnu indirme yönüne' },
+  { key: 'rudder', name: 'Yön dümeni', positive: 'sağa', negative: 'sola' },
+  { key: 'throttle', name: 'Gaz', positive: 'tam gaz konumuna', negative: 'rölanti konumuna' },
+] as const
+
+export const standardMapping: Mapping = { aileron: 'axis:2', elevator: 'axis:3', throttle: 'button:7', rudder: 'axis:0' }
+
+export function validCalibration(range?: AxisCalibration): range is AxisCalibration {
+  if (!range || ![range.min, range.center, range.max].every(Number.isFinite)) return false
+  const direction = Math.sign(range.max - range.min)
+  return (range.center - range.min) * direction >= .04 && (range.max - range.center) * direction >= .04
+}
+
+export function calibrationRange(key: AxisKey, min: number, max: number, neutral: number): AxisCalibration | undefined {
+  const range = { min, max, center: key === 'throttle' ? (min + max) / 2 : neutral }
+  return Math.abs(max - min) >= .16 && validCalibration(range) ? range : undefined
+}
 export const defaultAuxiliary: InputSource[] = Array.from({ length: 8 }, (_, index) => `axis:${index + 4}` as InputSource)
 export function deviceSources(axisCount: number, buttonCount: number): InputSource[] {
   const safeAxes = Math.max(0, Math.min(256, Math.floor(axisCount) || 0))
@@ -41,17 +60,17 @@ export function detectMovedSource(baseline: number[], current: number[], baselin
   return Math.abs(current[axis] - baseline[axis]) >= Math.abs(currentButtons[button] - baselineButtons[button]) ? `axis:${axis}` : `button:${button}`
 }
 export const defaultTuning: InputTuning = { reversed: { aileron: false, elevator: true, throttle: true, rudder: false }, deadzone: .06, expo: .2 }
-export function detectMovedAxis(baseline: number[], current: number[], threshold = .35): number | null {
+export function detectMovedAxis(baseline: number[], current: number[], threshold = .18): number | null {
   if (baseline.length !== current.length || !current.length) return null
   const changes = current.map((value, index) => Number.isFinite(value) && Number.isFinite(baseline[index]) ? Math.abs(value - baseline[index]) : 0)
   const largest = Math.max(...changes)
   return largest >= threshold ? changes.indexOf(largest) : null
 }
 export function calibrateAxis(raw: number, range?: AxisCalibration): number {
-  if (!range || !Number.isFinite(raw) || !Number.isFinite(range.min) || !Number.isFinite(range.center) || !Number.isFinite(range.max)) return Math.max(-1, Math.min(1, raw || 0))
+  if (!Number.isFinite(raw)) return 0
+  if (!validCalibration(range)) return Math.max(-1, Math.min(1, raw))
   const direction = range.max > range.min ? 1 : -1
   const low = range.min * direction, middle = range.center * direction, high = range.max * direction
-  if (middle - low < .15 || high - middle < .15) return Math.max(-1, Math.min(1, raw))
   const value = raw * direction
   return Math.max(-1, Math.min(1, value < middle ? (value - middle) / (middle - low) : (value - middle) / (high - middle)))
 }
@@ -64,5 +83,7 @@ export function gamepadControls(pad: Gamepad, mapping: Mapping, tuning: InputTun
     const expo = Math.max(0, Math.min(.8, tuning.expo))
     return value * (1 - expo) + value * value * value * expo
   }
-  return { aileron: shape(axis('aileron')), elevator: shape(axis('elevator')), rudder: shape(axis('rudder')), throttle: Math.max(0, Math.min(1, (axis('throttle') + 1) / 2)) }
+  const rawThrottle = readSource(pad, mapping.throttle)
+  const throttle = Number.isFinite(rawThrottle) ? (axis('throttle') + 1) / 2 : 0
+  return { aileron: shape(axis('aileron')), elevator: shape(axis('elevator')), rudder: shape(axis('rudder')), throttle }
 }

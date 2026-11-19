@@ -13,3 +13,109 @@ main{display:flex;flex-direction:column}header{order:0}.sim{order:1;margin-top:2
 .pilot-roster{margin:20px 0;padding:15px;background:#20353b;border:1px solid #52656a}.pilot-roster>strong{letter-spacing:2px;font-size:12px}.pilot-roster ul{list-style:none;padding:0;margin:12px 0 0}.pilot-roster li{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #ffffff18}.pilot-roster small{color:#f1844b}.overlay .email-field{display:flex;flex-direction:column;gap:7px;margin:14px 0}.overlay .email-field input{background:#20353b;border:1px solid #52656a;color:#fff;padding:12px}.overlay .account-action,.overlay .room-leave{margin:8px 8px 8px 0}
 .toolbar>div{flex-wrap:wrap}.toolbar .camera-choice,.toolbar .camera-zoom{gap:8px;white-space:nowrap}.camera-zoom input{width:90px;accent-color:#f1844b}
 .diagnostic-action{background:#20353b;color:#fff;border:1px solid #52656a;padding:9px 12px;margin:8px 0}
+
+.brand-icon { flex: none; }
+.scene-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  background: #15282e;
+  color: #c9d9d8;
+}
+.academy {
+  order: 2;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 18px;
+  margin-top: 22px;
+}
+.school-card, .hangar-card {
+  padding: 22px 24px;
+  border: 1px solid #385056;
+  border-radius: 5px;
+  background: #192d34;
+}
+.academy h2 { margin: 0 0 15px; font-size: 1.45rem; }
+.academy p { color: #c0cdce; line-height: 1.55; }
+.academy label { display: flex; align-items: center; gap: 14px; }
+.academy select {
+  width: min(100%, 270px);
+  padding: 9px;
+  border: 1px solid #657d82;
+  border-radius: 3px;
+  background: #20353b;
+  color: #f5f4e7;
+}
+.hangar-card dl { display: flex; flex-wrap: wrap; gap: 20px; }
+.hangar-card dt { color: #b9c7c9; font-size: .85rem; }
+.hangar-card dd { margin: 4px 0 0; color: #ffd4b9; font-size: 1.15rem; font-weight: 650; }
+.lesson-progress {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  display: grid;
+  gap: 5px;
+  max-width: min(40%, 265px);
+  padding: 10px 13px;
+  background: #102027ed;
+  border-left: 2px solid #f1844b;
+  border-radius: 3px;
+}
+.lesson-progress span, .lesson-progress small { color: #d2e1e0; font-size: .83rem; }
+.lesson-progress progress { width: 100%; height: 8px; accent-color: #f1844b; }
+.field-map {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 124px;
+  aspect-ratio: 1;
+  border: 1px solid #aec5bf9c;
+  border-radius: 4px;
+  background-color: #102027df;
+  background-image: linear-gradient(#a4c5b421 1px, transparent 1px), linear-gradient(90deg, #a4c5b421 1px, transparent 1px);
+  background-size: 25% 25%;
+  pointer-events: none;
+}
+.map-north, .map-scale { position: absolute; color: #e5ebe6; font-size: .7rem; }
+.attitude { top: 154px; }
+.map-north { top: 4px; left: 6px; }
+.map-scale { bottom: 4px; right: 6px; }
+.map-runway {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  background: #728a89;
+  border: 1px solid #d2ddd5;
+}
+.map-aircraft {
+  position: absolute;
+  width: 15px;
+  height: 16px;
+  background: #ffac77;
+  clip-path: polygon(50% 0, 100% 100%, 50% 68%, 0 100%);
+}
+.map-aircraft-outside { background: #ffce75; }
+.setup-card {
+  margin-block: 14px;
+  padding: 12px;
+  background: #20363e;
+  border-left: 2px solid #ed8350;
+}
+.setup-card p { margin: 6px 0 10px; }
+.setup-card button {
+  margin-right: 6px;
+  padding: 7px 10px;
+  border: 1px solid #697f83;
+  background: #14272d;
+  color: #edf0e9;
+}
+.setup-card button:disabled { opacity: .5; }
+@media (max-width: 780px) {
+  .brand-icon { width: 34px; height: 34px; }
+  .academy { grid-template-columns: 1fr; gap: 12px; }
+  .school-card, .hangar-card { padding: 17px; }
+  .lesson-progress { right: 8px; bottom: 66px; max-width: min(66%, 240px); }
+  .field-map { top: 8px; right: 8px; width: 76px; }
+  .attitude { top: 92px; }
+}

@@ -144,6 +144,7 @@ export class Simulation {
     this.raw = zeroControls()
     this.applied = zeroControls()
     this.accumulator = 0
+    this.env = this.buildEnvironment(0)
   }
 
   setAircraft(id: string, airborne?: SimulationOptions['airborne']) {
@@ -188,7 +189,7 @@ export class Simulation {
     if (state.crashed) return
     const agl = Math.max(0, state.position[1] - this.field.height(state.position[0], state.position[2]))
     const wind = windVector(this.weather, state.position, agl, state.time, this.assists.windEffects)
-    if (this.field.ridgeLift > 0) {
+    if (this.assists.windEffects && this.field.ridgeLift > 0) {
       wind[1] += ridgeLiftAt(this.field, state.position[0], state.position[2], agl, this.weather.windSpeed)
     }
     const air = atmosphere(state.position[1])

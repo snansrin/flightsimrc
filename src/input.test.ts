@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calibrateAxis, defaultChannels, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, normalizeSource, readSource } from './input'
+import { calibrationRange, calibrateAxis, defaultChannels, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, normalizeSource, readSource } from './input'
 
 const pad = (axes: number[]) => ({ axes }) as unknown as Gamepad
 
@@ -58,5 +58,19 @@ describe('RC input tuning', () => {
     expect(defaultChannels(16, 0).auxiliary).toHaveLength(12)
     expect(defaultChannels(2, 2).mapping.throttle).toBe('button:0')
     expect(defaultChannels(0, 0).auxiliary).toHaveLength(0)
+  })
+})
+describe('guided setup', () => {
+  it('calibrates a reversed narrow-range stick and throttle from observed endpoints', () => {
+    expect(calibrationRange('aileron', .64, .27, .46)).toEqual({ min: .64, center: .46, max: .27 })
+    const throttle = calibrationRange('throttle', .86, -.73, .86)
+    expect(gamepadControls(pad([0, 0, .86, 0]), defaultMapping, {
+      ...defaultTuning, reversed: { ...defaultTuning.reversed, throttle: false },
+    }, { throttle }).throttle).toBe(0)
+    expect(calibrationRange('rudder', -.03, .04, 0)).toBeUndefined()
+  })
+  it('fails to idle when the throttle report is missing or has not arrived', () => {
+    expect(gamepadControls(pad([0, 0, NaN, 0]), defaultMapping).throttle).toBe(0)
+    expect(gamepadControls(pad([]), defaultMapping).throttle).toBe(0)
   })
 })

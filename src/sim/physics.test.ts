@@ -3,7 +3,7 @@ import { aircraftById } from './catalog'
 import { stallSpeed } from './aero'
 import { attitudeEuler, attitudeQuat, qRotate, deg, rad } from './math'
 import { Simulation } from './simulation'
-import { formatMeasurements, measureHover, measureTakeoff, measureTrim, verifyAirframe } from './verify'
+import { formatMeasurements, measureHover, measureTakeoff, measureTrim, verifyAirframe, verifyAll } from './verify'
 import { zeroControls } from './types'
 
 describe('attitude maths', () => {
@@ -123,13 +123,13 @@ describe('rotorcraft', () => {
 })
 
 describe('full catalogue verification report', () => {
-  it('prints measured performance for every airframe', () => {
-    const rows = ['trainer1500', 'extra330', 'edf90', 'glider2000', 'quad5', 'heli500'].flatMap(id => verifyAirframe(id))
+  it('prints measured performance for every catalogue airframe', () => {
+    const rows = verifyAll()
     // eslint-disable-next-line no-console
     console.log('\n' + formatMeasurements(rows) + '\n')
     expect(rows.length).toBeGreaterThan(10)
     const trainerRows = rows.filter(r => r.aircraft === 'trainer1500')
     expect(trainerRows.filter(r => r.pass).length).toBeGreaterThanOrEqual(5)
     expect(deg(1)).toBeCloseTo(57.2958, 3)
-  })
+  }, 30_000)
 })
