@@ -111,6 +111,9 @@ main{display:flex;flex-direction:column}header{order:0}.sim{order:1;margin-top:2
   color: #edf0e9;
 }
 .setup-card button:disabled { opacity: .5; }
+.axis-monitor > div { flex-wrap: wrap; }
+.axis-monitor .axis-moved { color: #a9dfbb; }
+.axis-monitor .axis-still { color: #b5c4c6; }
 @media (max-width: 780px) {
   .brand-icon { width: 34px; height: 34px; }
   .academy { grid-template-columns: 1fr; gap: 12px; }

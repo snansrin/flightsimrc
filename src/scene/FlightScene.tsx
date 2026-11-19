@@ -45,7 +45,7 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
       if (Math.abs(camera.fov - fov) > .01) { camera.fov = fov; camera.updateProjectionMatrix() }
     }
   })
-  return <group ref={ref}>{cameraMode !== "onboard" && <VehicleModel kind={vehicle} controls={controls} />}</group>
+  return <group ref={ref}>{cameraMode !== 'onboard' && <VehicleModel kind={vehicle} controls={controls} state={state} />}</group>
 }
 export default function FlightScene({ state, controls, field, cameraMode, zoom, vehicle, peers }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; field: Field; cameraMode: CameraMode; zoom: number; vehicle: string; peers: RemotePilot[] }) {
   return <Canvas camera={{ position: [0, 1.4, -4], fov: 58, near: .025, far: 1100 }} dpr={[1, 1.5]} shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>

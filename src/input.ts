@@ -5,6 +5,21 @@ export type Mapping = Record<AxisKey, InputSource>
 export type InputTuning = { reversed: Record<AxisKey, boolean>; deadzone: number; expo: number }
 export type AxisCalibration = { min: number; center: number; max: number }
 export type Calibration = Partial<Record<AxisKey, AxisCalibration>>
+export type Travel = { min: number; max: number }
+
+export function observeTravel(ranges: (Travel | undefined)[], values: readonly number[]): void {
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index]
+    if (!Number.isFinite(value)) continue
+    const range = ranges[index]
+    if (range) {
+      range.min = Math.min(range.min, value)
+      range.max = Math.max(range.max, value)
+    } else ranges[index] = { min: value, max: value }
+  }
+}
+
+export const hasTravel = (range?: Travel) => Boolean(range && range.max - range.min >= .035)
 export const defaultMapping: Mapping = { aileron: 'axis:0', elevator: 'axis:1', throttle: 'axis:2', rudder: 'axis:3' }
 export const flightChannels = [
   { key: 'aileron', name: 'Yatış', positive: 'sağa', negative: 'sola' },
@@ -52,8 +67,8 @@ export function readSource(pad: Gamepad, source: InputSource): number | undefine
   const button = pad.buttons?.[index]
   return button ? button.value * 2 - 1 : undefined
 }
-export function detectMovedSource(baseline: number[], current: number[], baselineButtons: number[], currentButtons: number[]): InputSource | null {
-  const axis = detectMovedAxis(baseline, current)
+export function detectMovedSource(baseline: number[], current: number[], baselineButtons: number[], currentButtons: number[], axisThreshold = .18): InputSource | null {
+  const axis = detectMovedAxis(baseline, current, axisThreshold)
   const button = detectMovedAxis(baselineButtons, currentButtons, .5)
   if (axis === null) return button === null ? null : `button:${button}`
   if (button === null) return `axis:${axis}`

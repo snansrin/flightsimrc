@@ -1,5 +1,6 @@
 import type { Simulation, SimulationOptions } from './sim/simulation'
 import type { Vec3 } from './sim/math'
+import { runwayCoordinates } from './sim/fields'
 
 export const lessons = [
   { id: 'takeoff', name: 'Pistten kalkış', aircraft: 'trainer', instruction: 'Gazı kademeli artır. Pist eksenini koru, hızlanınca burnu hafifçe kaldır ve 8 m tırman.', seconds: 2, timeout: 55 },
@@ -42,10 +43,8 @@ export function assessLesson(run: LessonRun, sim: Simulation, dt: number): void 
   }
   const [x, , z] = state.position
   const { runway } = field
-  const heading = runway.heading * Math.PI / 180
-  const dx = x - runway.center[0], dz = z - runway.center[1]
-  const crossTrack = Math.abs(dx * Math.cos(heading) + dz * Math.sin(heading))
-  const alongTrack = dx * Math.sin(heading) - dz * Math.cos(heading)
+  const [lateral, alongTrack] = runwayCoordinates(runway.center, runway.heading, x, z)
+  const crossTrack = Math.abs(lateral)
   const wingsLevel = Math.abs(attitude.roll) < Math.PI / 12
   let meetsTarget = false
   switch (lesson.id) {

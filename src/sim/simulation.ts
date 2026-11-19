@@ -1,7 +1,7 @@
 import { aerodynamics, stallSpeed } from './aero'
 import { atmosphere, GRAVITY, windVector, type WeatherConfig } from './atmosphere'
 import { aircraftById } from './catalog'
-import { fieldById, ridgeLiftAt, startOnRunway, type Field } from './fields'
+import { fieldById, groundTractionAt, ridgeLiftAt, startOnRunway, type Field } from './fields'
 import { attitudeEuler, clamp, length, type Vec3 } from './math'
 import { createHeliState, createFcState, heliController, heliForces, heliRpm, quadController, quadForces, type FcState, type HeliState } from './rotor'
 import { createState, integrate, lag, type ForceModel } from './rigidBody'
@@ -107,6 +107,7 @@ export class Simulation {
       density,
       temperature: atmosphere(this.state?.position[1] ?? 0).temperature,
       groundHeight: (x, z) => field.height(x, z),
+      groundTraction: (x, z) => groundTractionAt(field, x, z),
       waterHeight: field.waterLevel,
       time,
     }
@@ -120,10 +121,10 @@ export class Simulation {
       altitude: airborne?.altitude ?? 0,
       airspeed: airborne?.airspeed ?? 0,
       pitch: airborne ? 0.02 : 0,
-      groundHeight: this.field.height(start.position[0], start.position[2]),
+      groundHeight: start.position[1],
     })
     if (this.spec.family !== 'fixed') {
-      state.position[1] = this.field.height(start.position[0], start.position[2]) + (airborne?.altitude ?? 0.02) + 0.02
+      state.position[1] = start.position[1] + (airborne?.altitude ?? 0.02) + 0.02
       if (airborne) {
         state.rpm = this.spec.family === 'heli' ? 1 : 0
         state.motors = [0.5, 0.5, 0.5, 0.5]
@@ -187,15 +188,17 @@ export class Simulation {
   step(dt = STEP) {
     const state = this.state
     if (state.crashed) return
-    const agl = Math.max(0, state.position[1] - this.field.height(state.position[0], state.position[2]))
+    const agl = Math.max(0, state.agl)
     const wind = windVector(this.weather, state.position, agl, state.time, this.assists.windEffects)
     if (this.assists.windEffects && this.field.ridgeLift > 0) {
-      wind[1] += ridgeLiftAt(this.field, state.position[0], state.position[2], agl, this.weather.windSpeed)
+      wind[1] += ridgeLiftAt(this.field, state.position[0], state.position[2], agl, wind)
     }
     const air = atmosphere(state.position[1])
     this.env = {
       wind, turbulence: this.weather.turbulence, density: air.density, temperature: air.temperature,
-      groundHeight: (x, z) => this.field.height(x, z), waterHeight: this.field.waterLevel, time: state.time,
+      groundHeight: (x, z) => this.field.height(x, z),
+      groundTraction: (x, z) => groundTractionAt(this.field, x, z),
+      waterHeight: this.field.waterLevel, time: state.time,
     }
     this.applied = applyAssists(this.spec, state, this.raw, this.assists)
     // Actuators.

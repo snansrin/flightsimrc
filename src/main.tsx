@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Controls } from './flight'
-import { calibrationRange, flightChannels, standardMapping, calibrateAxis, defaultMapping, defaultTuning, defaultChannels, deviceSources, detectMovedSource, gamepadControls, normalizeSource, readSource, type Mapping, type InputSource, type AxisKey, type InputTuning, type Calibration } from './input'
+import { hasTravel, observeTravel, validCalibration, type Travel, calibrationRange, flightChannels, standardMapping, calibrateAxis, defaultMapping, defaultTuning, defaultChannels, deviceSources, detectMovedSource, gamepadControls, normalizeSource, readSource, type Mapping, type InputSource, type AxisKey, type InputTuning, type Calibration } from './input'
 import { hidApi, openHidController, type HidController, type HidDeviceLike } from './hid'
 import { hangar, hangarAircraft, soundFamily } from './hangar'
 import { fields } from './sim/fields'
@@ -74,6 +74,9 @@ function App() {
   const [tuning, setTuning] = useState<InputTuning>(() => { try { const saved = JSON.parse(localStorage.getItem('flight-tuning') || '{}'); return { ...defaultTuning, ...saved, reversed: { ...defaultTuning.reversed, ...saved.reversed } } } catch { return defaultTuning } })
   const [padAxes, setPadAxes] = useState<number[]>([])
   const [padButtons, setPadButtons] = useState<number[]>([])
+  const travel = useRef<{ axes: (Travel | undefined)[]; buttons: (Travel | undefined)[] }>({ axes: [], buttons: [] })
+  const [axisTravel, setAxisTravel] = useState<(Travel | undefined)[]>([])
+  const preferredHid = useRef<number | null>(null)
   const [padName, setPadName] = useState('Klavye')
   const [availablePads, setAvailablePads] = useState<{ index: number; id: string; axes: number; buttons: number }[]>([])
   const [selectedPadIndex, setSelectedPadIndex] = useState<number | null>(null)
@@ -210,6 +213,11 @@ function App() {
       for (const index of padBaselines.current.keys()) if (!pads.some(pad => pad.index === index)) padBaselines.current.delete(index)
       if (autoPadIndex.current !== null && !pads.some(pad => pad.index === autoPadIndex.current)) autoPadIndex.current = null
       if (selectedPadIndex !== null && !pads.some(p => p.index === selectedPadIndex)) setSelectedPadIndex(null)
+      const requested = preferredHid.current
+      if (requested !== null && pads.some(pad => pad.index === requested)) {
+        preferredHid.current = null
+        setSelectedPadIndex(requested)
+      }
       const pad = choosePad(pads, selectedPadIndex ?? autoPadIndex.current)
       setAvailablePads(previous => {
         const next = pads.map(p => ({ index: p.index, id: p.id, axes: p.axes.length, buttons: p.buttons.length }))
@@ -219,6 +227,7 @@ function App() {
       const deviceKey = pad ? `${pad.index}:${pad.id}:${pad.axes.length}:${pad.buttons.length}` : ''
       const changedDevice = deviceKey !== activeDevice.current
       if (changedDevice) {
+        travel.current = { axes: [], buttons: [] }
         if (!pad && controllerArmed) setPaused(true)
         setSetup(null)
         setDetectKey(null)
@@ -265,6 +274,10 @@ function App() {
         }
         controls.current = { ...zero }
       }
+      if (pad) {
+        observeTravel(travel.current.axes, pad.axes)
+        observeTravel(travel.current.buttons, pad.buttons.map(button => button.value))
+      }
       if (pad && controllerArmed && !changedDevice) {
         const target = gamepadControls(pad, mapping, tuning, calibration)
         const response = 1 - Math.exp(-delta * 10)
@@ -292,7 +305,7 @@ function App() {
         }
       }
       sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed, paused || flight.current.crashed)
-      if (now - display > 100) { setHud({ ...flight.current }); if (lessonRun.current) setLessonHud({ ...lessonRun.current }); setPadAxes(pad ? [...pad.axes] : []); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
+      if (now - display > 100) { setHud({ ...flight.current }); if (lessonRun.current) setLessonHud({ ...lessonRun.current }); setPadAxes(pad ? [...pad.axes] : []); setAxisTravel(travel.current.axes.map(range => range && { ...range })); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame)
@@ -384,6 +397,8 @@ function App() {
       const devices = await api.requestDevice({ filters: [] })
       if (!devices.length) { setControllerMessage('Cihaz seçimi iptal edildi.'); return }
       for (const device of devices) await attachHid(device)
+      const opened = hidControllers.current.find(controller => devices.includes(controller.device))
+      preferredHid.current = opened?.index ?? null
       setControllerMessage('USB HID açıldı. Bir kolu oynat ve canlı girdilerin değiştiğini kontrol et.')
     } catch (error) { setControllerMessage(error instanceof Error ? `USB HID bağlantısı kurulamadı: ${error.message}` : 'USB HID bağlantısı kurulamadı.') }
   }
@@ -403,9 +418,9 @@ function App() {
     if (!setup.source) {
       const used = flightChannels.slice(0, setup.index).map(({ key }) => profile.mapping[key])
       const values = pad.axes.map((value, index) => used.includes(`axis:${index}`) ? NaN : value)
-      const source = detectMovedSource(setup.neutral, values, [], [])
+      const source = detectMovedSource(setup.neutral, values, [], [], .08)
       const positive = source ? readSource(pad, source) : undefined
-      if (!source || positive === undefined) { setControllerMessage('Belirgin bir hareket bulunamadı. Yalnızca istenen kolu uç konuma getir.'); return }
+      if (!source || positive === undefined) { setControllerMessage('Bu yönde hareket sinyali gelmedi. Kolu uçta tutup tekrar kaydet. Kol testinde eksenler sabitse kumandanın kanal çıkışını kontrol et.'); return }
       setSetup({ ...setup, source, positive })
       setControllerMessage('')
       return
@@ -444,8 +459,19 @@ function App() {
       setControllerMessage('Dört farklı uçuş girdisi gerekli. Rehberli kalibrasyonu çalıştır veya kanal eşlemesini kontrol et.')
       return
     }
-    const throttle = gamepadControls(pad, mapping, tuning, calibration).throttle
+    if (pad.mapping !== 'standard' && !flightChannels.every(({ key }) => {
+      const [kind, index] = mapping[key].split(':')
+      return validCalibration(calibration[key]) || hasTravel((kind === 'axis' ? travel.current.axes : travel.current.buttons)[Number(index)])
+    })) {
+      setControllerMessage('Dört uçuş girdisinden hareket alınması veya geçerli kalibrasyon gerekli. Önce kol testini çalıştır.')
+      return
+    }
+    const { throttle, aileron, elevator, rudder } = gamepadControls(pad, mapping, tuning, calibration)
     if (throttle > .05) { setControllerMessage(`Gaz %${Math.round(throttle * 100)}. Gaz kanalını/yönünü ayarla ve kolu sıfıra indir.`); return }
+    if (Math.max(Math.abs(aileron), Math.abs(elevator), Math.abs(rudder)) > .22) {
+      setControllerMessage('Yatış, irtifa ve yön kollarını ortaya getir. Ortada durmasına rağmen değer yüksekse rehberli kalibrasyonu çalıştır.')
+      return
+    }
     setControllerArmed(true)
     setControllerMessage('Kumanda hazır. Paneli kapatıp Devam düğmesine bas.')
   }
@@ -484,6 +510,8 @@ function App() {
     try { await navigator.clipboard.writeText(`${location.origin}${location.pathname}?room=${roomCode}`); setRoomMessage('Davet bağlantısı kopyalandı.') }
     catch { setRoomMessage('Bağlantıyı adres çubuğundan kopyalayabilirsin.') }
   }
+  const movedAxes = axisTravel.filter(hasTravel).length
+  const t12d = /t12d/i.test(padName)
   const field = fields[fieldIndex]
   const aircraft = hangarAircraft(vehicle)
   const speed = hud.airspeed
@@ -502,7 +530,7 @@ function App() {
         {cameraMode === 'onboard' && <div className="crosshair" aria-hidden="true">+</div>}
         {hud.crashed && <div className="crash"><strong>Uçuş sona erdi</strong><span>{engine.state.crashReason || 'Araç kaza yaptı.'}</span><button onClick={retry}>Yeniden başla</button></div>}
         {hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}
-        <div className="attitude"><span>YATIŞ {bank}°</span><span>BURUN {pitch}°</span><span>ALFA {Math.round(hud.angleOfAttack * 180 / Math.PI)}°</span></div>
+        <div className="attitude"><span>YATIŞ {bank}°</span><span>BURUN {pitch}°</span><span>ALFA {speed < 5 ? '—' : Math.round(hud.angleOfAttack * 180 / Math.PI) + '°'}</span></div>
         <div className="hud">
           <div><small>HAVA HIZI</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div>
           <div><small>YERDEN</small><strong>{Math.round(Math.max(0, engine.state.agl))}</strong><span>m</span></div>
@@ -587,6 +615,15 @@ function App() {
       <p className="muted">En fazla dört pilot. Şifreli odada yalnızca doğru kod ve şifreden türetilen kanala bağlanılır; bu sürümde sunucu tarafı hesap doğrulaması ve güçlü erişim denetimi yoktur.</p>
     </aside></div>}
     {showSettings && <div className="overlay" onClick={() => setShowSettings(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowSettings(false)}>✕</button><p className="eyebrow">KUMANDA AYARLARI</p><h2>Kumanda kanalları</h2><p>Bağlı cihaz: {padName}. Bir düğmeye basarak cihazı tarayıcıda etkinleştir.</p><ControllerDiscovery pads={availablePads} selected={selectedPadIndex} onSelect={index => { setSetup(null); setSelectedPadIndex(index); setControllerArmed(false); setPaused(true) }} onMessage={setControllerMessage} /><button type="button" className="diagnostic-action" onClick={() => void requestHidController()}>USB HID kumandası bağla</button><button type="button" className="diagnostic-action" onClick={() => void copyControllerReport()}>Kumanda tanı bilgisini kopyala</button><div className="setup-card">
+      <strong>Kol testi · {movedAxes} / {padAxes.length} eksen hareket etti</strong>
+      <p>Her kolu yatay ve dikey yönde oynat. Canlı listede hareket eden eksen ve görülen aralık işaretlenir.</p>
+      <button type="button" disabled={!padAxes.length} onClick={() => {
+        travel.current = { axes: [], buttons: [] }
+        setAxisTravel([])
+        setControllerMessage('Kol testi sıfırlandı. Kolları tek tek tam uçtan uca oynat.')
+      }}>Kol testini sıfırla</button>
+      {t12d && movedAxes < 4 && <p>T12D: modelin alıcısını kapalı tut, vericiyi normal aç ve TRAINER özelliğini kapalı tut. Kumandanın kanal göstergesinde CH1–CH4 kolları izlemiyorsa STICK MODE ve kumanda kalibrasyonunu kontrol et.</p>}
+    </div><div className="axis-monitor"><strong>CANLI GİRDİLER · {padName.includes(" · HID ") ? "WEBHID" : "GAMEPAD"} · {padAxes.length} EKSEN / {padButtons.length} DÜĞME</strong>{padAxes.length ? padAxes.map((value, i) => <div key={i}>Eksen {i + 1}<meter min={-1} max={1} value={Number.isFinite(value) ? value : 0} />{Number.isFinite(value) ? value.toFixed(2) : "Sinyal bekleniyor"}<small className={hasTravel(axisTravel[i]) ? "axis-moved" : "axis-still"}>{hasTravel(axisTravel[i]) ? `${axisTravel[i]!.min.toFixed(2)} … ${axisTravel[i]!.max.toFixed(2)}` : "Sabit"}</small></div>) : <p>Eksen görünmüyor.</p>}{padButtons.map((value, i) => <div key={`button-${i}`}>Düğme {i + 1}<meter min={0} max={1} value={Number.isFinite(value) ? value : 0} />{Number.isFinite(value) ? value.toFixed(2) : "Sinyal bekleniyor"}</div>)}</div><div className="setup-card">
       {setup ? <>
         <strong>{setup.index + 1} / 4 · {flightChannels[setup.index].name}</strong>
         <p>Kolu {setup.source ? flightChannels[setup.index].negative : flightChannels[setup.index].positive} götür, orada tut ve kaydet.</p>
@@ -596,7 +633,7 @@ function App() {
         <p>Yatış, irtifa, yön ve gaz kollarını tanıt. Başlarken gaz rölantide, diğer kollar ortada olsun.</p>
         <button type="button" disabled={padAxes.filter(Number.isFinite).length < 4} onClick={advanceSetup}>Rehberli kalibrasyon</button>
       </>}
-    </div><p className="muted">Tarayıcı bu cihazda {padAxes.length} eksen ve {padButtons.length} düğme bildiriyor. Panel, tarayıcının sunduğu {padAxes.length + padButtons.length} girdi için oluşur. Her girdi ayrı eşlenebilir.</p>{(Object.keys(mapping) as AxisKey[]).slice(0, Math.min(4, padAxes.length + padButtons.length)).map((key, index) => <div className="axis" key={key}><label htmlFor={`axis-${key}`}>{`Kanal ${index + 1} · ${key}`}</label><select id={`axis-${key}`} value={mapping[key]} onChange={e => updateMapping(key, e.target.value as InputSource)}>{sourceOptions(mapping[key])}</select><label className="reverse"><input type="checkbox" checked={tuning.reversed[key]} onChange={e => updateTuning({ ...tuning, reversed: { ...tuning.reversed, [key]: e.target.checked } })} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(key)}>{detectKey === key ? 'Kolu oynat…' : 'Ekseni bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'max')}>Maks</button></div></div>)}{auxiliary.map((source, index) => <div className="axis" key={index}><label htmlFor={`aux-${index}`}>Kanal {index + 5} · yardımcı</label><select id={`aux-${index}`} value={source} onChange={e => updateAuxiliary(index, e.target.value as InputSource)}>{sourceOptions(source)}</select><label className="reverse"><input type="checkbox" checked={auxReversed[index]} onChange={e => { const next = [...auxReversed]; next[index] = e.target.checked; setAuxReversed(next); saveDeviceSetting('auxReversed', next) }} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(`aux:${index}`)}>{detectKey === `aux:${index}` ? 'Kolu oynat…' : 'Kanalı bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'max')}>Maks</button></div><small className="channel-value">{(() => { const raw = source.startsWith('axis:') ? padAxes[Number(source.slice(5))] : padButtons[Number(source.slice(7))] * 2 - 1; if (!Number.isFinite(raw)) return 'Girdi yok'; const range = auxCalibration[index]; const calibrated = calibrateAxis(raw, range); return `${((auxReversed[index] ? -1 : 1) * calibrated).toFixed(2)}` })()}</small></div>)}<label className="tuning">Ölü bölge {Math.round(tuning.deadzone * 100)}%<input type="range" min="0" max="0.2" step="0.01" value={tuning.deadzone} onChange={e => updateTuning({ ...tuning, deadzone: Number(e.target.value) })} /></label><label className="tuning">Expo {Math.round(tuning.expo * 100)}%<input type="range" min="0" max="0.8" step="0.05" value={tuning.expo} onChange={e => updateTuning({ ...tuning, expo: Number(e.target.value) })} /></label><button className="account-action" type="button" disabled={(!padAxes.length && !padButtons.length) || controllerArmed || Boolean(setup)} onClick={armController}>{controllerArmed ? 'Kumanda hazır' : 'Kumandayı etkinleştir'}</button>{controllerMessage && <p role="status">{controllerMessage}</p>}<div className="axis-monitor"><strong>CANLI GİRDİLER · {padAxes.length} EKSEN / {padButtons.length} DÜĞME</strong>{padAxes.length ? padAxes.map((value, i) => <div key={i}>Eksen {i + 1}<meter min={-1} max={1} value={Number.isFinite(value) ? value : 0} />{Number.isFinite(value) ? value.toFixed(2) : "Sinyal bekleniyor"}</div>) : <p>Eksen görünmüyor.</p>}{padButtons.map((value, i) => <div key={`button-${i}`}>Düğme {i + 1}<meter min={0} max={1} value={Number.isFinite(value) ? value : 0} />{Number.isFinite(value) ? value.toFixed(2) : "Sinyal bekleniyor"}</div>)}</div><p className="muted">İlk dört girdi uçuşu kontrol eder; sonraki girdiler izleme ve profil ayarları içindir. Her kanal için kolu en düşük, orta ve en yüksek konuma getirip ilgili düğmeye bas. Gaz ekseninde orta için kolu yarıya getir. Ayarlar bağlı cihaza özel saklanır. Kalibrasyondan sonra gaz yönünü ve sıfır gazı kontrol et.</p></aside></div>}
+    </div><p className="muted">Tarayıcı bu cihazda {padAxes.length} eksen ve {padButtons.length} düğme bildiriyor. Panel, tarayıcının sunduğu {padAxes.length + padButtons.length} girdi için oluşur. Her girdi ayrı eşlenebilir.</p>{(Object.keys(mapping) as AxisKey[]).slice(0, Math.min(4, padAxes.length + padButtons.length)).map((key, index) => <div className="axis" key={key}><label htmlFor={`axis-${key}`}>{`Kanal ${index + 1} · ${key}`}</label><select id={`axis-${key}`} value={mapping[key]} onChange={e => updateMapping(key, e.target.value as InputSource)}>{sourceOptions(mapping[key])}</select><label className="reverse"><input type="checkbox" checked={tuning.reversed[key]} onChange={e => updateTuning({ ...tuning, reversed: { ...tuning.reversed, [key]: e.target.checked } })} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(key)}>{detectKey === key ? 'Kolu oynat…' : 'Ekseni bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureCalibration(key, 'max')}>Maks</button></div></div>)}{auxiliary.map((source, index) => <div className="axis" key={index}><label htmlFor={`aux-${index}`}>Kanal {index + 5} · yardımcı</label><select id={`aux-${index}`} value={source} onChange={e => updateAuxiliary(index, e.target.value as InputSource)}>{sourceOptions(source)}</select><label className="reverse"><input type="checkbox" checked={auxReversed[index]} onChange={e => { const next = [...auxReversed]; next[index] = e.target.checked; setAuxReversed(next); saveDeviceSetting('auxReversed', next) }} /> Ters</label><div className="calibration"><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => beginAxisDetection(`aux:${index}`)}>{detectKey === `aux:${index}` ? 'Kolu oynat…' : 'Kanalı bul'}</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'min')}>Min</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'center')}>Orta</button><button type="button" disabled={!padAxes.length && !padButtons.length} onClick={() => captureAuxiliary(index, 'max')}>Maks</button></div><small className="channel-value">{(() => { const raw = source.startsWith('axis:') ? padAxes[Number(source.slice(5))] : padButtons[Number(source.slice(7))] * 2 - 1; if (!Number.isFinite(raw)) return 'Girdi yok'; const range = auxCalibration[index]; const calibrated = calibrateAxis(raw, range); return `${((auxReversed[index] ? -1 : 1) * calibrated).toFixed(2)}` })()}</small></div>)}<label className="tuning">Ölü bölge {Math.round(tuning.deadzone * 100)}%<input type="range" min="0" max="0.2" step="0.01" value={tuning.deadzone} onChange={e => updateTuning({ ...tuning, deadzone: Number(e.target.value) })} /></label><label className="tuning">Expo {Math.round(tuning.expo * 100)}%<input type="range" min="0" max="0.8" step="0.05" value={tuning.expo} onChange={e => updateTuning({ ...tuning, expo: Number(e.target.value) })} /></label><button className="account-action" type="button" disabled={(!padAxes.length && !padButtons.length) || controllerArmed || Boolean(setup)} onClick={armController}>{controllerArmed ? 'Kumanda hazır' : 'Kumandayı etkinleştir'}</button>{controllerMessage && <p role="status">{controllerMessage}</p>}<p className="muted">İlk dört girdi uçuşu kontrol eder; sonraki girdiler izleme ve profil ayarları içindir. Her kanal için kolu en düşük, orta ve en yüksek konuma getirip ilgili düğmeye bas. Gaz ekseninde orta için kolu yarıya getir. Ayarlar bağlı cihaza özel saklanır. Kalibrasyondan sonra gaz yönünü ve sıfır gazı kontrol et.</p></aside></div>}
   </main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

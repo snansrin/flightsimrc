@@ -1,5 +1,6 @@
 import { clamp, fbm, smoothstep, type Vec3 } from './math'
 import { calmWeather, type WeatherConfig } from './atmosphere'
+import type { GroundTraction } from './types'
 
 export type Biome = 'grass' | 'coast' | 'alpine' | 'desert' | 'snow' | 'city' | 'island'
 
@@ -64,7 +65,10 @@ export const fields: Field[] = [
     biome: 'coast', seed: 23, weather: { ...calmWeather, windSpeed: 3.6, windDirection: 260, turbulence: 0.3, thermals: 0.25, label: 'Deniz meltemi' },
     runway: { heading: 0, length: 90, width: 8, surface: 'asphalt', center: [0, 0], elevation: 0 },
     waterLevel: -0.35,
-    height: makeHeight(23, 140, (x, _z, n) => (x > 150 ? -6 + 2 * n(90) : 10 * n(380) + 4 * n(110))),
+    height: makeHeight(23, 115, (x, _z, n) => {
+      const coast = smoothstep(130, 210, x + n(190) * 16)
+      return (10 * n(380) + 4 * n(110)) * (1 - coast) + (-7 + 2 * n(90)) * coast
+    }),
     clearing: 140, trees: 150, buildings: 5, ridgeLift: 0.3,
     notes: 'Doğuda deniz; yüzdürmeli model ve yan rüzgâr inişi çalışması için.',
   },
@@ -123,17 +127,40 @@ export const fields: Field[] = [
     biome: 'island', seed: 101, weather: { ...calmWeather, windSpeed: 3.0, windDirection: 240, turbulence: 0.28, thermals: 0.3, label: 'Lagün meltemi' },
     runway: { heading: 0, length: 200, width: 40, surface: 'water', center: [0, 0], elevation: 0 },
     waterLevel: 0,
-    height: makeHeight(101, 60, (x, z, n) => {
-      const d = Math.hypot(x, z)
-      const island = smoothstep(320, 120, d) * (26 + 14 * n(160))
-      return island - 8 + 3 * n(60)
-    }),
+    height: (x, z) => {
+      const eastBank = smoothstep(32, 105, Math.abs(x + 8 * Math.sin(z / 90)))
+      const islands = smoothstep(425, 180, Math.hypot(x, z))
+      return -3 + eastBank * islands * (18 + 12 * fbm(x / 130, z / 130, 4, 101))
+    },
     clearing: 60, trees: 220, buildings: 3, ridgeLift: 0.5,
     notes: 'Sudan kalkış ve suya iniş; step tekniği ve su direnci.',
   },
 ]
 
 export const fieldById = (id: string): Field => fields.find(f => f.id === id) ?? fields[0]
+const paved: GroundTraction = { rolling: 1, braking: 1, lateral: 1 }
+const turf: GroundTraction = { rolling: 1.8, braking: .8, lateral: .8 }
+const roughGrass: GroundTraction = { rolling: 2.6, braking: .72, lateral: .74 }
+const looseSand: GroundTraction = { rolling: 4, braking: .54, lateral: .55 }
+const snow: GroundTraction = { rolling: 2.4, braking: .27, lateral: .35 }
+
+export function groundTractionAt(field: Field, x: number, z: number): GroundTraction {
+  const { center, length, width, heading, surface } = field.runway
+  const [right, along] = runwayCoordinates(center, heading, x, z)
+  if (Math.abs(right) <= width / 2 && Math.abs(along) <= length / 2) {
+    if (surface === 'grass') return turf
+    if (surface !== 'water') return paved
+  }
+  if (field.biome === 'snow') return snow
+  if (field.biome === 'desert') return looseSand
+  return roughGrass
+}
+
+export function runwayCoordinates(center: [number, number], heading: number, x: number, z: number): [number, number] {
+  const h = heading * Math.PI / 180
+  const dx = x - center[0], dz = z - center[1]
+  return [dx * Math.cos(h) + dz * Math.sin(h), dx * Math.sin(h) - dz * Math.cos(h)]
+}
 
 /** Start position on the threshold, pointing down the strip. */
 export function startOnRunway(field: Field, offset = 6): { position: Vec3; heading: number } {
@@ -141,7 +168,7 @@ export function startOnRunway(field: Field, offset = 6): { position: Vec3; headi
   const half = field.runway.length / 2 - offset
   const x = field.runway.center[0] - Math.sin(heading) * half
   const z = field.runway.center[1] + Math.cos(heading) * half
-  const ground = field.height(x, z)
+  const ground = Math.max(field.height(x, z), field.waterLevel)
   return { position: [x, ground, z], heading }
 }
 
@@ -150,14 +177,15 @@ export const runwayAxis = (field: Field): Vec3 => {
   return [Math.sin(h), 0, -Math.cos(h)]
 }
 
-/** Ridge lift when wind blows against a slope; used by the glider lessons. */
-export function ridgeLiftAt(field: Field, x: number, z: number, agl: number, windSpeed: number): number {
-  if (field.ridgeLift <= 0 || windSpeed < 1) return 0
+/** Approximate vertical flow from wind crossing the local terrain gradient. */
+export function ridgeLiftAt(field: Field, x: number, z: number, agl: number, wind: Vec3): number {
+  if (field.ridgeLift <= 0 || Math.hypot(wind[0], wind[2]) < .5) return 0
   const e = 3
-  const slope = (field.height(x + e, z) - field.height(x - e, z)) / (2 * e)
-  const facing = clamp(-slope, 0, 1)
+  const slopeX = (field.height(x + e, z) - field.height(x - e, z)) / (2 * e)
+  const slopeZ = (field.height(x, z + e) - field.height(x, z - e)) / (2 * e)
+  const vertical = (slopeX * wind[0] + slopeZ * wind[2]) * field.ridgeLift
   const proximity = Math.exp(-Math.pow(clamp(agl, 0, 200) / 70, 2))
-  return facing * windSpeed * field.ridgeLift * proximity * 0.8
+  return clamp(vertical, -3.5, 4.5) * proximity
 }
 
 export type Gate = { position: Vec3; radius: number; heading: number }

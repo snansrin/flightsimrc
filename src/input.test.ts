@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { calibrationRange, calibrateAxis, defaultChannels, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, normalizeSource, readSource } from './input'
+import { calibrationRange, calibrateAxis, defaultChannels, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, hasTravel, normalizeSource, observeTravel, readSource, type Travel } from './input'
 
 const pad = (axes: number[]) => ({ axes }) as unknown as Gamepad
+
+it('counts actual movement without counting the T12D midpoint channels or jitter', () => {
+  const ranges: (Travel | undefined)[] = []
+  observeTravel(ranges, [-1, -1, -1, -1, 0, -1, 0, -1])
+  observeTravel(ranges, [-1, -1, -1, -1, 0, -1, .007, -1])
+  expect(ranges.filter(hasTravel)).toHaveLength(0)
+  observeTravel(ranges, [-.67, -.71, -.44, -.52, 0, -1, 0, -1])
+  expect(ranges.filter(hasTravel)).toHaveLength(4)
+})
 
 describe('RC input tuning', () => {
   it('keeps a centered stick at zero and maps throttle endpoints', () => {

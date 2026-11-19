@@ -92,10 +92,11 @@ export function groundContact(spec: AircraftSpec, state: SimState, controls: Con
     let surface = env.groundHeight(world[0], world[2])
     const water = env.waterHeight
     const floating = gear.kind === 'float' && Number.isFinite(water) && water > surface - 0.05
-    if (floating) { surface = Math.max(surface, water); result.inWater = true }
+    if (floating) surface = Math.max(surface, water)
     const penetration = surface + gear.radius - world[1]
     if (penetration <= 0) continue
     result.contact = true
+    result.inWater ||= floating
     const normal = floating ? [0, 1, 0] as Vec3 : groundNormal(env, world[0], world[2])
     const pointVelocity = add(state.velocity, qRotate(state.attitude, cross(state.omega, r)))
     const vn = dot(pointVelocity, normal)
@@ -110,23 +111,29 @@ export function groundContact(spec: AircraftSpec, state: SimState, controls: Con
     const steerAngle = gear.steering * controls.rudder
     const rollAxis = normalize(qRotate(state.attitude, [Math.cos(steerAngle), Math.sin(steerAngle), 0]))
     const rollDir = normalize(sub(rollAxis, scale(normal, dot(rollAxis, normal))))
-    const brake = gear.brake * clamp((controls.aux[1] + 1) / 2, 0, 1)
+    const traction = env.groundTraction?.(world[0], world[2])
+    const brake = gear.brake * clamp(controls.aux[1], 0, 1) * (traction?.braking ?? 1)
     let friction: Vec3
     if (gear.kind === 'wheel') {
       const rollSpeed = dot(tangent, rollDir)
       const lateral = sub(tangent, scale(rollDir, rollSpeed))
       const lateralSpeed = length(lateral)
-      // Water/step behaviour: floats shed drag once planing.
-      const planing = floating ? clamp((length(tangent) - 4) / 6, 0, 0.75) : 0
-      const rollMu = (gear.rollingResistance + brake) * (1 - planing)
+      const rollMu = gear.rollingResistance * (traction?.rolling ?? 1) + brake
       const rollForce = -Math.tanh(rollSpeed * 4) * rollMu * normalForce
       const lateralForce = lateralSpeed > 1e-4
-        ? scale(lateral, -Math.min(gear.grip * normalForce, lateralSpeed * spec.mass / Math.max(dt, 1e-3) * 0.4) / lateralSpeed)
+        ? scale(lateral, -Math.min(gear.grip * (traction?.lateral ?? 1) * normalForce, lateralSpeed * spec.mass / Math.max(dt, 1e-3) * 0.4) / lateralSpeed)
         : [0, 0, 0] as Vec3
       friction = add(scale(rollDir, rollForce), lateralForce)
+    } else if (floating) {
+      const forwardSpeed = dot(tangent, rollDir)
+      const crossFlow = sub(tangent, scale(rollDir, forwardSpeed))
+      const planing = clamp((forwardSpeed - 4) / 7, 0, .72)
+      const drag = -Math.tanh(forwardSpeed * .7) * gear.grip * (1 - planing) * .35 * normalForce
+      const lateral = scale(crossFlow, -Math.min(gear.grip * normalForce / Math.max(.3, length(crossFlow)), spec.mass * 6))
+      friction = add(scale(rollDir, drag), lateral)
     } else {
       const speed = length(tangent)
-      const mu = gear.grip * (gear.kind === 'float' ? 0.35 : 1)
+      const mu = gear.grip * (traction?.lateral ?? 1)
       friction = speed > 1e-4
         ? scale(tangent, -Math.min(mu * normalForce, speed * spec.mass / Math.max(dt, 1e-3) * 0.4) / speed)
         : [0, 0, 0] as Vec3
@@ -191,9 +198,10 @@ export function integrate(
     }
   }
   const k1 = evaluate(state)
-  const k2 = evaluate(shifted(state, k1.d, dt / 2, env.groundHeight))
-  const k3 = evaluate(shifted(state, k2.d, dt / 2, env.groundHeight))
-  const k4 = evaluate(shifted(state, k3.d, dt, env.groundHeight))
+  const elevation = (x: number, z: number) => Math.max(env.groundHeight(x, z), env.waterHeight)
+  const k2 = evaluate(shifted(state, k1.d, dt / 2, elevation))
+  const k3 = evaluate(shifted(state, k2.d, dt / 2, elevation))
+  const k4 = evaluate(shifted(state, k3.d, dt, elevation))
   const mix = (a: Vec3, b: Vec3, c: Vec3, d: Vec3): Vec3 => [
     (a[0] + 2 * b[0] + 2 * c[0] + d[0]) / 6,
     (a[1] + 2 * b[1] + 2 * c[1] + d[1]) / 6,
@@ -210,7 +218,7 @@ export function integrate(
   void qd
   const contact = k1.contact
   const ground = env.groundHeight(position[0], position[2])
-  const agl = position[1] - ground
+  const agl = position[1] - Math.max(ground, env.waterHeight)
   const info = k1.info ?? {}
   const next: SimState = {
     ...state,
@@ -237,7 +245,10 @@ export function integrate(
   const attitudeE = attitudeEuler(next.attitude)
   if (!state.crashed) {
     const limits = spec.family === 'fixed' ? { impact: -3.4, tilt: 0.95 } : { impact: -3.2, tilt: 0.8 }
-    if (contact.tipStrike) { next.crashed = true; next.crashReason = 'Kanat ucu / rotor yere değdi' }
+    const waterImpact = env.waterHeight - ground > .08 && agl < Math.max(.04, spec.visual.fuselageRadius * .6)
+      && !spec.gear.some(gear => gear.kind === 'float')
+    if (waterImpact) { next.crashed = true; next.crashReason = 'Suya temas' }
+    else if (contact.tipStrike) { next.crashed = true; next.crashReason = 'Kanat ucu / rotor yere değdi' }
     else if (contact.hardImpact < limits.impact && !state.onGround) { next.crashed = true; next.crashReason = `Sert temas (${Math.abs(contact.hardImpact).toFixed(1)} m/s dikey)` }
     else if (contact.contact && Math.abs(attitudeE.roll) > limits.tilt && spec.visual.gearStyle !== 'none') { next.crashed = true; next.crashReason = 'Yan yatış ile temas' }
     else if (agl < spec.visual.fuselageRadius * 0.55 && next.groundSpeed > 5 && !contact.contact) { next.crashed = true; next.crashReason = 'Gövde yere sürttü' }

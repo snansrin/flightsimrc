@@ -16,6 +16,8 @@ export type FlightState = {
   angleOfAttack: number
   crashed: boolean
   stalled: boolean
+  engineSpeed?: number
+  gearPosition?: number
 }
 
 const GROUND_HEIGHT = .25

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useLoader } from '@react-three/fiber'
+import { useFrame, useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
 import type { Field } from '../sim/fields'
+import { windVector } from '../sim/atmosphere'
 
 const palettes: Record<Field['biome'], { ground: string; sky: string; foliage: string }> = {
   grass: { ground: '#9daa84', sky: '#a9c6d3', foliage: '#547555' },
@@ -117,15 +118,64 @@ export function airfieldPilotPosition(field: Field): [number, number, number] {
 
 function Windsock({ field }: { field: Field }) {
   const [x, y, z] = airfieldPilotPosition(field)
-  return <group position={[x + 3, y - 1.7, z]} rotation={[0, THREE.MathUtils.degToRad(270 + field.weather.windDirection), 0]}>
+  const vane = useRef<THREE.Group>(null)
+  const sock = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => {
+    if (!vane.current || !sock.current) return
+    const time = clock.getElapsedTime()
+    const [westEast, , southNorth] = windVector(field.weather, [x + 3, y + 1.16, -z], 2.86, time)
+    const power = Math.hypot(westEast, southNorth)
+    vane.current.rotation.y = Math.atan2(southNorth, westEast)
+    sock.current.rotation.z = -.92 * Math.exp(-power / 1.6) + Math.sin(time * 8) * Math.min(power * .021, .085)
+  })
+  return <group position={[x + 3, y - 1.7, z]}>
     <mesh position={[0, 1.45, 0]}><cylinderGeometry args={[.024, .037, 2.9, 8]} /><meshStandardMaterial color="#cbd2d1" /></mesh>
-    <mesh position={[.43, 2.86, 0]} rotation={[0, 0, -Math.PI / 2]}>
-      <cylinderGeometry args={[.065, .17, .88, 12, 1, true]} /><meshStandardMaterial color="#dc5538" side={THREE.DoubleSide} />
-    </mesh>
-    <mesh position={[.015, 2.86, 0]} rotation={[0, Math.PI / 2, 0]}>
-      <torusGeometry args={[.17, .017, 6, 16]} /><meshStandardMaterial color="#f7ece4" />
-    </mesh>
+    <group position={[0, 2.86, 0]} ref={vane}><group ref={sock}>
+      <mesh position={[.43, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+        <cylinderGeometry args={[.065, .17, .88, 12, 1, true]} /><meshStandardMaterial color="#dc5538" side={THREE.DoubleSide} />
+      </mesh>
+      <mesh rotation={[0, Math.PI / 2, 0]}><torusGeometry args={[.17, .017, 6, 16]} /><meshStandardMaterial color="#f7ece4" /></mesh>
+    </group></group>
   </group>
+}
+
+function WaterSurface({ field }: { field: Field }) {
+  const normalMap = useMemo(() => {
+    const size = 64
+    const pixels = new Uint8Array(size * size * 4)
+    for (let z = 0; z < size; z++) for (let x = 0; x < size; x++) {
+      const u = x * Math.PI * 2 / size, v = z * Math.PI * 2 / size
+      const waveA = Math.cos(u * 2 + v)
+      const waveB = Math.cos(v * 4 - u)
+      const dx = .18 * waveA - .085 * waveB
+      const dz = .09 * waveA + .34 * waveB
+      const length = Math.hypot(dx, dz, 1)
+      const offset = (z * size + x) * 4
+      pixels[offset] = 127.5 * (1 - dx / length)
+      pixels[offset + 1] = 127.5 * (1 - dz / length)
+      pixels[offset + 2] = 127.5 * (1 + 1 / length)
+      pixels[offset + 3] = 255
+    }
+    const texture = new THREE.DataTexture(pixels, size, size)
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+    texture.magFilter = THREE.LinearFilter
+    texture.minFilter = THREE.LinearMipmapLinearFilter
+    texture.generateMipmaps = true
+    texture.repeat.set(100, 100)
+    texture.needsUpdate = true
+    return texture
+  }, [])
+  useEffect(() => () => normalMap.dispose(), [normalMap])
+  const direction = THREE.MathUtils.degToRad(field.weather.windDirection)
+  useFrame((_, dt) => {
+    const drift = (.2 + field.weather.windSpeed * .18) * dt / 1600
+    normalMap.offset.x = (normalMap.offset.x + Math.sin(direction) * drift + 1) % 1
+    normalMap.offset.y = (normalMap.offset.y + Math.cos(direction) * drift + 1) % 1
+  })
+  return <mesh position={[0, field.waterLevel + .003, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+    <planeGeometry args={[1600, 1600]} />
+    <meshStandardMaterial color={field.biome === 'island' ? '#3e8994' : '#4b798b'} normalMap={normalMap} roughness={.35} metalness={.16} />
+  </mesh>
 }
 
 export function Airfield({ field }: { field: Field }) {
@@ -148,9 +198,7 @@ export function Airfield({ field }: { field: Field }) {
     <directionalLight position={[25, 35, -35]} intensity={2.35} castShadow shadow-mapSize={[2048, 2048]}
       shadow-camera-left={-75} shadow-camera-right={75} shadow-camera-top={75} shadow-camera-bottom={-75} shadow-bias={-.0001} />
     <mesh geometry={terrain} receiveShadow><meshStandardMaterial vertexColors map={field.biome === 'snow' ? null : grass} roughness={.99} /></mesh>
-    {water && <mesh position={[0, field.waterLevel + .003, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[1600, 1600]} /><meshStandardMaterial color="#4b8795" roughness={.24} metalness={.2} />
-    </mesh>}
+    {water && <WaterSurface field={field} />}
     <group position={[runway.center[0], runway.elevation, -runway.center[1]]} rotation={[0, THREE.MathUtils.degToRad(runway.heading), 0]}>
       {runway.surface === 'water' ? [-1, 1].flatMap(side => [-.43, -.22, 0, .22, .43].map(fraction =>
         <mesh key={`${side}:${fraction}`} position={[side * runway.width / 2, .12, fraction * runway.length]}>

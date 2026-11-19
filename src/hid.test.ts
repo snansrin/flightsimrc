@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { buildHidLayout, decodeHidReport, type HidCollection } from './hid'
 
 describe('descriptor-driven HID controller input', () => {
+  it('reads the eight 16-bit T12D axes from the same report layout as Windows', () => {
+    const layout = buildHidLayout([{ usagePage: 1, usage: 5, children: [], inputReports: [{ reportId: 0, items: [
+      { reportSize: 8, reportCount: 3, logicalMinimum: 0, logicalMaximum: 255, isConstant: true },
+      { reportSize: 16, reportCount: 8, logicalMinimum: 0, logicalMaximum: 2048,
+        usages: Array.from({ length: 8 }, (_, index) => 0x10030 + index) },
+    ] }] }])
+    const data = new DataView(new ArrayBuffer(19))
+    const axes: number[] = [], buttons: number[] = []
+    // Resting values observed in the physical USB report. WebHID strips the leading report ID.
+    data.setUint16(3 + 4 * 2, 1024, true)
+    data.setUint16(3 + 6 * 2, 1024, true)
+    decodeHidReport(layout, 0, data, axes, buttons)
+    expect(axes).toEqual([-1, -1, -1, -1, 0, -1, 0, -1])
+    // An independent synthetic sweep shows that all four stick positions are decoded when transmitted.
+    for (const [index, value] of [2048, 1024, 512, 1536].entries()) data.setUint16(3 + index * 2, value, true)
+    decodeHidReport(layout, 0, data, axes, buttons)
+    expect(axes.slice(0, 4)).toEqual([1, 0, -.5, .5])
+  })
   it('decodes twelve unaligned analog axes and packed buttons', () => {
     const collection: HidCollection = {
       usagePage: 1, usage: 4, children: [], inputReports: [{ reportId: 1, items: [

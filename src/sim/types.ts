@@ -202,6 +202,8 @@ export type SimState = {
   loadFactor: number
 }
 
+export type GroundTraction = { rolling: number; braking: number; lateral: number }
+
 export type Environment = {
   /** World-frame wind vector at the aircraft, m/s. */
   wind: Vec3
@@ -210,6 +212,7 @@ export type Environment = {
   temperature: number
   /** Terrain height (world y) at a world x/z position. */
   groundHeight: (x: number, z: number) => number
+  groundTraction?: (x: number, z: number) => GroundTraction
   /** Water surface height, or -Infinity when there is no water. */
   waterHeight: number
   time: number
