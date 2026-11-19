@@ -11,6 +11,7 @@ import type { CameraMode } from './scene/FlightScene'
 import { applyDisplayControls, newFlightSimulation, physicsFieldId, toDisplayFlight } from './sim/bridge'
 import { EngineAudio } from './audio'
 import { ControllerSignalRow } from './ControllerSignalRow'
+import { choosePreferredPad } from './controllerSelection'
 import { prepareQuickFlight } from './quickFlight'
 import { findGuidedAxis, guidedRange, type GuidedStep } from './guidedSetup'
 import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
@@ -30,7 +31,7 @@ function connectedPads(hidControllers: IndexedHid[]): Gamepad[] {
   return [...gamepads, ...hidPads.filter(pad => pad.connected)]
 }
 function choosePad(pads: Gamepad[], selectedIndex: number | null): Gamepad | undefined {
-  return selectedIndex === null ? [...pads].sort((a, b) => b.axes.length - a.axes.length || b.buttons.length - a.buttons.length)[0] : pads.find(pad => pad.index === selectedIndex)
+  return choosePreferredPad(pads, selectedIndex)
 }
 function ControllerDiscovery({ pads, selected, onSelect, onMessage }: {
   pads: { index: number; id: string; axes: number; buttons: number }[]
@@ -88,8 +89,6 @@ function App() {
   const setupProfile = useRef<{ mapping: Mapping; calibration: Calibration } | null>(null)
   const [setup, setSetup] = useState<GuidedStep | null>(null)
   const manualCalibrationDraft = useRef<Partial<Record<AxisKey, Partial<{ min: number; center: number; max: number }>>>>({})
-  const autoPadIndex = useRef<number | null>(null)
-  const padBaselines = useRef(new Map<number, { axes: number[]; buttons: number[] }>())
   const [calibration, setCalibration] = useState<Calibration>({})
   const activeDevice = useRef('')
   const deviceProfileId = useRef('')
@@ -203,25 +202,12 @@ function App() {
     const tick = (now: number) => {
       const delta = Math.min((now - last) / 1000, 0.1); last = now
       const pads = connectedPads(hidControllers.current)
-      for (const candidate of pads) {
-        const currentAxes = [...candidate.axes], currentButtons = candidate.buttons.map(button => button.value)
-        const baseline = padBaselines.current.get(candidate.index)
-        if (!baseline || baseline.axes.length !== currentAxes.length || baseline.buttons.length !== currentButtons.length) {
-          padBaselines.current.set(candidate.index, { axes: currentAxes, buttons: currentButtons })
-        } else if (detectMovedSource(baseline.axes, currentAxes, baseline.buttons, currentButtons)) {
-          if (selectedPadIndex === null && !controllerArmed && !setup) autoPadIndex.current = candidate.index
-          padBaselines.current.set(candidate.index, { axes: currentAxes, buttons: currentButtons })
-        }
-      }
-      for (const index of padBaselines.current.keys()) if (!pads.some(pad => pad.index === index)) padBaselines.current.delete(index)
-      if (autoPadIndex.current !== null && !pads.some(pad => pad.index === autoPadIndex.current)) autoPadIndex.current = null
-      if (selectedPadIndex !== null && !pads.some(p => p.index === selectedPadIndex)) setSelectedPadIndex(null)
       const requested = preferredHid.current
       if (requested !== null && pads.some(pad => pad.index === requested)) {
         preferredHid.current = null
         setSelectedPadIndex(requested)
       }
-      const pad = choosePad(pads, selectedPadIndex ?? autoPadIndex.current)
+      const pad = choosePad(pads, selectedPadIndex)
       setAvailablePads(previous => {
         const next = pads.map(p => ({ index: p.index, id: p.id, axes: p.axes.length, buttons: p.buttons.length }))
         return JSON.stringify(previous) === JSON.stringify(next) ? previous : next
@@ -231,14 +217,14 @@ function App() {
       const changedDevice = deviceKey !== activeDevice.current
       if (changedDevice) {
         travel.current = { axes: [], buttons: [] }
-        if (!pad && controllerArmed) setPaused(true)
+        if (controllerArmed) setPaused(true)
         setSetup(null)
         manualCalibrationDraft.current = {}
         setDetectKey(null)
         activeDevice.current = deviceKey
         deviceProfileId.current = pad?.id ?? ''
         setControllerArmed(false)
-        if (pad) { setPaused(true); setShowSettings(true); setControllerMessage('Eşlemeyi doğrula veya rehberli kalibrasyonu çalıştır. Gaz rölantideyken kumandayı etkinleştir.') }
+        if (pad) setControllerMessage('Kumanda algılandı. Uçuşa başlamak için ⚙ Kumanda ayarları bölümünden kumandayı etkinleştir; kalibrasyon isteğe bağlıdır.')
         const prefix = `flight-device:${deviceProfileId.current}:`
         if (pad) {
           const defaults = defaultChannels(pad.axes.length, pad.buttons.length)
@@ -358,7 +344,7 @@ function App() {
   }
   const updateTuning = (next: InputTuning) => { setControllerArmed(false); setTuning(next); saveDeviceSetting('tuning', next) }
   const captureCalibration = (key: AxisKey, point: 'min' | 'center' | 'max') => {
-    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex ?? autoPadIndex.current)
+    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex)
     const raw = pad ? readSource(pad, mapping[key]) : undefined
     if (!Number.isFinite(raw)) { setControllerMessage('Bu kanal için canlı sinyal yok. Önce doğru ekseni eşleştir.'); return }
     const draft = { ...manualCalibrationDraft.current[key], [point]: raw }
@@ -386,7 +372,7 @@ function App() {
     setControllerArmed(false)
   }
   const captureAuxiliary = (index: number, point: 'min' | 'center' | 'max') => {
-    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex ?? autoPadIndex.current)
+    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex)
     const raw = pad ? readSource(pad, auxiliary[index]) : undefined
     if (raw === undefined) return
     const next = [...auxCalibration]; next[index] = { min: -1, center: 0, max: 1, ...next[index], [point]: raw }
@@ -419,7 +405,7 @@ function App() {
     } catch (error) { setControllerMessage(error instanceof Error ? `USB HID bağlantısı kurulamadı: ${error.message}` : 'USB HID bağlantısı kurulamadı.') }
   }
   const startWithoutCalibration = () => {
-    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex ?? autoPadIndex.current)
+    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex)
     if (!pad) { setControllerMessage('Uçuş için bağlı kumanda bulunamadı. USB cihazını seç veya HID bağlantısını dene.'); return }
     const prepared = prepareQuickFlight(pad, mapping, tuning)
     if (!prepared.ok) {
@@ -444,7 +430,7 @@ function App() {
     simRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
   const advanceSetup = () => {
-    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex ?? autoPadIndex.current)
+    const pad = choosePad(connectedPads(hidControllers.current), selectedPadIndex)
     if (!pad) { setControllerMessage('Bağlı kumanda yok. Cihazını seç veya USB HID bağlantısını kontrol et.'); return }
     if (!setup) {
       setupProfile.current = { mapping: { ...mapping }, calibration: {} }
@@ -518,7 +504,7 @@ function App() {
       return
     }
     const pads = connectedPads(hidControllers.current)
-    const pad = choosePad(pads, selectedPadIndex ?? autoPadIndex.current)
+    const pad = choosePad(pads, selectedPadIndex)
     if (!pad) { setControllerMessage('Bağlı kumanda bulunamadı.'); return }
     if (new Set(Object.values(mapping)).size !== 4 || !Object.values(mapping).every(source => Number.isFinite(readSource(pad, source)))) {
       setControllerMessage('Dört farklı ve okunabilir uçuş girdisi gerekli. Eksen eşlemesini kontrol et; kalibrasyon isteğe bağlıdır.')
@@ -585,7 +571,7 @@ function App() {
   const pitch = Math.round(hud.pitch * 180 / Math.PI)
   return <main><header><div className="brand"><img className="brand-icon" src={`${import.meta.env.BASE_URL}flightsimrc.svg`} width="44" height="44" alt="" /><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
     <section className="sim" ref={simRef}>
-      <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div><div>{padName.slice(0, 42)}</div></div>
+      <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div><div>{padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
       <div className="viewport">
         <Suspense fallback={<div className="scene-loading" role="status">Uçuş alanı yükleniyor…</div>}>
           <FlightScene state={flight} controls={controls} field={field} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle}
