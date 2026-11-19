@@ -2,7 +2,7 @@ import type { Controls } from './flight'
 export type AxisKey = keyof Controls
 export type InputSource = `axis:${number}` | `button:${number}`
 export type Mapping = Record<AxisKey, InputSource>
-export type InputTuning = { reversed: Record<AxisKey, boolean>; deadzone: number; expo: number }
+export type InputTuning = { reversed: Record<AxisKey, boolean>; deadzone: number; expo: number; rates: Record<Exclude<AxisKey, 'throttle'>, number> }
 export type AxisCalibration = { min: number; center: number; max: number }
 export type Calibration = Partial<Record<AxisKey, AxisCalibration>>
 export type Travel = { min: number; max: number }
@@ -20,6 +20,13 @@ export function observeTravel(ranges: (Travel | undefined)[], values: readonly n
 }
 
 export const hasTravel = (range?: Travel) => Boolean(range && range.max - range.min >= .035)
+export function axisSignalSummary(axes: readonly number[], ranges: readonly (Travel | undefined)[]) {
+  return {
+    reported: axes.length,
+    received: axes.filter(Number.isFinite).length,
+    moving: axes.filter((value, index) => Number.isFinite(value) && hasTravel(ranges[index])).length,
+  }
+}
 export const defaultMapping: Mapping = { aileron: 'axis:0', elevator: 'axis:1', throttle: 'axis:2', rudder: 'axis:3' }
 export const flightChannels = [
   { key: 'aileron', name: 'Yatış', positive: 'sağa', negative: 'sola' },
@@ -74,7 +81,7 @@ export function detectMovedSource(baseline: number[], current: number[], baselin
   if (button === null) return `axis:${axis}`
   return Math.abs(current[axis] - baseline[axis]) >= Math.abs(currentButtons[button] - baselineButtons[button]) ? `axis:${axis}` : `button:${button}`
 }
-export const defaultTuning: InputTuning = { reversed: { aileron: false, elevator: true, throttle: true, rudder: false }, deadzone: .06, expo: .2 }
+export const defaultTuning: InputTuning = { reversed: { aileron: false, elevator: true, throttle: true, rudder: false }, deadzone: .06, expo: .2, rates: { aileron: 1, elevator: 1, rudder: 1 } }
 export function detectMovedAxis(baseline: number[], current: number[], threshold = .18): number | null {
   if (baseline.length !== current.length || !current.length) return null
   const changes = current.map((value, index) => Number.isFinite(value) && Number.isFinite(baseline[index]) ? Math.abs(value - baseline[index]) : 0)
@@ -98,7 +105,11 @@ export function gamepadControls(pad: Gamepad, mapping: Mapping, tuning: InputTun
     const expo = Math.max(0, Math.min(.8, tuning.expo))
     return value * (1 - expo) + value * value * value * expo
   }
+  const rate = (key: 'aileron' | 'elevator' | 'rudder') => {
+    const scale = Math.max(.5, Math.min(2, tuning.rates?.[key] ?? 1))
+    return Math.max(-1, Math.min(1, shape(axis(key)) * scale))
+  }
   const rawThrottle = readSource(pad, mapping.throttle)
   const throttle = Number.isFinite(rawThrottle) ? (axis('throttle') + 1) / 2 : 0
-  return { aileron: shape(axis('aileron')), elevator: shape(axis('elevator')), rudder: shape(axis('rudder')), throttle }
+  return { aileron: rate('aileron'), elevator: rate('elevator'), rudder: rate('rudder'), throttle }
 }
