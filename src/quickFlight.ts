@@ -17,7 +17,7 @@ const directions: Exclude<AxisKey, 'throttle'>[] = ['aileron', 'elevator', 'rudd
  * The user explicitly holds the throttle at IDLE and the other sticks CENTERED.
  * Do not guess missing channel data or bypass zero-throttle arming.
  */
-export function prepareQuickFlight(pad: Gamepad, mapping: Mapping, tuning: InputTuning): QuickFlightResult {
+export function prepareQuickFlight(pad: Gamepad, mapping: Mapping, tuning: InputTuning, throttleReverseOverride: boolean | null = null): QuickFlightResult {
   const sources = Object.values(mapping)
   if (new Set(sources).size !== 4) {
     return { ok: false, message: 'Uçuş için dört farklı kanal gerekli. Eksen eşlemesini düzelt veya Ekseni bul düğmesini kullan.' }
@@ -44,6 +44,7 @@ export function prepareQuickFlight(pad: Gamepad, mapping: Mapping, tuning: Input
   }
 
   const throttlePositiveAtIdle = raw.throttle > 0
+  const throttleReversed = throttleReverseOverride ?? throttlePositiveAtIdle
   const min = throttlePositiveAtIdle ? -1 : raw.throttle
   const max = throttlePositiveAtIdle ? raw.throttle : 1
   const calibration: Calibration = {
@@ -57,9 +58,12 @@ export function prepareQuickFlight(pad: Gamepad, mapping: Mapping, tuning: Input
   }
   const nextTuning: InputTuning = {
     ...defaultTuning, ...tuning,
-    reversed: { ...defaultTuning.reversed, ...tuning.reversed, throttle: throttlePositiveAtIdle },
+    reversed: { ...defaultTuning.reversed, ...tuning.reversed, throttle: throttleReversed },
   }
   const controls = gamepadControls(pad, mapping, nextTuning, calibration)
+  if (throttleReverseOverride !== null && controls.throttle > .05) {
+    return { ok: false, message: 'Gaz ters yönü seçili fakat mevcut gaz konumu rölanti değil. Gazı yeni rölanti ucuna getir veya Gaz yönünü otomatik belirle seçeneğini kullan.' }
+  }
   if (controls.throttle > .05 || Math.max(Math.abs(controls.aileron), Math.abs(controls.elevator), Math.abs(controls.rudder)) > .22) {
     return { ok: false, message: 'Gaz sıfırı veya merkezler doğrulanamadı. Gazı rölantiye, diğer kolları ortaya getir ve tekrar dene.' }
   }
