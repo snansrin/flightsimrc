@@ -54,4 +54,43 @@ describe('one-click flight without manual calibration', () => {
     const result = check([0, 0, 0, 0, 0, -1], mapping)
     expect(result.ok).toBe(true)
   })
+  it('keeps manual roll/pitch/yaw reverse settings when entering calibration-free flight', () => {
+    const customTuning = {
+      ...defaultTuning,
+      reversed: { aileron: true, elevator: false, rudder: true, throttle: false },
+    }
+    const started = prepareQuickFlight(device([0, 0, -1, 0]), defaultMapping, customTuning)
+    expect(started.ok).toBe(true)
+    if (!started.ok) return
+    expect(started.tuning.reversed.aileron).toBe(true)
+    expect(started.tuning.reversed.elevator).toBe(false)
+    expect(started.tuning.reversed.rudder).toBe(true)
+    const moved = gamepadControls(device([.6, .5, -.5, .6]), defaultMapping, started.tuning, started.calibration)
+    expect(moved.aileron).toBeLessThan(0)
+    expect(moved.elevator).toBeGreaterThan(0)
+    expect(moved.rudder).toBeLessThan(0)
+  })
+
+  it('never overwrites a manually selected throttle direction during quick flight', () => {
+    const positiveIdle = prepareQuickFlight(device([0, 0, 1, 0]), defaultMapping, defaultTuning, true)
+    expect(positiveIdle.ok).toBe(true)
+    if (positiveIdle.ok) expect(positiveIdle.tuning.reversed.throttle).toBe(true)
+    const wrongIdle = prepareQuickFlight(device([0, 0, 1, 0]), defaultMapping, defaultTuning, false)
+    expect(wrongIdle.ok).toBe(false)
+    if (!wrongIdle.ok) expect(wrongIdle.message).toContain('Gaz ters yönü')
+    const negativeIdle = prepareQuickFlight(device([0, 0, -1, 0]), defaultMapping, defaultTuning, false)
+    expect(negativeIdle.ok).toBe(true)
+    if (negativeIdle.ok) expect(negativeIdle.tuning.reversed.throttle).toBe(false)
+    const otherWrongIdle = prepareQuickFlight(device([0, 0, -1, 0]), defaultMapping, defaultTuning, true)
+    expect(otherWrongIdle.ok).toBe(false)
+  })
+
+  it('continues to infer throttle polarity when no manual override is specified', () => {
+    const auto = prepareQuickFlight(device([0, 0, 1, 0]), defaultMapping, {
+      ...defaultTuning, reversed: { ...defaultTuning.reversed, throttle: false },
+    }, null)
+    expect(auto.ok).toBe(true)
+    if (auto.ok) expect(auto.tuning.reversed.throttle).toBe(true)
+  })
+
 })
