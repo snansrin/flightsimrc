@@ -262,3 +262,178 @@ main{display:flex;flex-direction:column}header{order:0}.sim{order:1;margin-top:2
 }
 .axis .reverse input { accent-color: #f1844b; }
 .axis .reverse:has(input:checked) { color: #ffbf91; }
+
+/* Flight Deck 2.0 — built around SVG flight instruments with genuine simulator data. */
+:root {
+  --deck-bg: #0d1b27;
+  --deck-surface: #152737;
+  --deck-divider: #29475a;
+  --deck-ink: #e8f3f6;
+  --deck-muted: #8ca9b5;
+  --deck-teal: #72edcf;
+  --deck-amber: #ffcc87;
+}
+body {
+  background: radial-gradient(ellipse 90% 680px at 50% -270px, #244d58 0%, #0b1922 60%, #0a141b 100%);
+}
+.sim {
+  overflow: hidden;
+  border: 1px solid #47606d;
+  border-radius: 14px;
+  background: #0e202a;
+  box-shadow: 0 28px 84px #0009, 0 0 0 1px #b0e6e80c inset;
+}
+.simtop {
+  padding: 15px 22px;
+  background: #102733;
+  border-bottom-color: #31515f;
+  color: #cce3e8;
+}
+.viewport { background: #132d3a; }
+.toolbar {
+  background: #112834;
+  border-top-color: #345665;
+  gap: 12px;
+}
+.toolbar .deck-toggle {
+  border-color: #4aa892;
+  color: #b7ffe6;
+  background: #1c4541;
+}
+.toolbar .deck-toggle:hover { border-color: var(--deck-teal); background: #245c4f; color: white; }
+.toolbar .assist-choice { flex: 1 1 170px; }
+.toolbar .assist-choice select { width: 100%; }
+.field-map {
+  width: 148px;
+  border: 1px solid #7aa3a8a8;
+  border-radius: 9px;
+  overflow: hidden;
+  box-shadow: 0 7px 28px #0310178c;
+}
+.field-route { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.map-waypoint {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #baffed;
+  border-radius: 100%;
+  transform: translate(-50%, -50%);
+  background: #297762;
+  box-shadow: 0 0 0 3px #61d9b14a, 0 0 16px #68ffe2;
+}
+.flight-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(190px, .68fr);
+  gap: 14px;
+  padding: 16px;
+  background: linear-gradient(135deg, #0c1b27, #102a36 65%, #122b34);
+  border-top: 1px solid #3e6572;
+  color: var(--deck-ink);
+}
+.deck-instrument {
+  min-width: 0;
+  padding: 13px 15px 14px;
+  border: 1px solid var(--deck-divider);
+  background: linear-gradient(150deg, #1a3141, #101f2e 85%);
+  border-radius: 11px;
+  box-shadow: inset 0 1px 0 #aee5f21c, 0 7px 24px #06101933;
+}
+.deck-instrument-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  font: 750 11px/1.4 'Segoe UI', Arial, sans-serif;
+  letter-spacing: 1.4px;
+  color: #d1e9ee;
+}
+.deck-online { color: var(--deck-teal); font-weight: 650; font-size: 10px; letter-spacing: .5px; white-space: nowrap; }
+.deck-instrument svg { display: block; width: min(100%, 224px); margin: 7px auto 4px; overflow: visible; filter: drop-shadow(0 4px 14px #02090f80); }
+.deck-hsi svg { width: min(100%, 222px); }
+.deck-instrument svg text { user-select: none; }
+.deck-adi-readouts, .deck-nav-readouts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 7px;
+  padding-top: 8px;
+  border-top: 1px solid #3a5d6b;
+}
+.deck-nav-readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.deck-adi-readouts > div, .deck-nav-readouts > div { display: flex; align-items: center; flex-direction: column; gap: 3px; text-align: center; min-width: 0; }
+.deck-adi-readouts span, .deck-nav-readouts span {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .8px;
+  color: var(--deck-muted);
+}
+.deck-adi-readouts strong, .deck-nav-readouts strong {
+  font-size: clamp(12px, 1.35vw, 17px);
+  line-height: 1.5;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: #f4f5f0;
+  white-space: nowrap;
+}
+.deck-adi-readouts small, .deck-nav-readouts small { font-size: 10px; color: var(--deck-muted); }
+.deck-course-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+}
+.deck-course-chooser label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; font-weight: 650; color: #a8c4cb; }
+.deck-course-chooser select {
+  flex: 1;
+  min-width: 0;
+  max-width: 205px;
+  background: #213f4f;
+  color: #f0f6f6;
+  border: 1px solid #527889;
+  border-radius: 5px;
+  padding: 8px;
+}
+.deck-course-buttons { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.deck-course-buttons span { margin-right: auto; font-size: 11px; letter-spacing: 1px; color: #a8c4cb; }
+.deck-course-buttons button {
+  background: #193d4b;
+  color: var(--deck-ink);
+  border: 1px solid #4f7d8b;
+  border-radius: 5px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.deck-course-buttons button:hover, .deck-course-buttons button:focus-visible { background: #24637a; color: white; outline-color: var(--deck-teal); }
+.deck-nav-status { margin: 10px 0 0; color: var(--deck-teal); font: 600 10px/1.5 'Segoe UI',Arial,sans-serif; letter-spacing: .4px; }
+.deck-side-data { display: grid; grid-template-columns: 1fr; align-content: start; gap: 10px; }
+.deck-metric {
+  padding: 12px 14px;
+  background: #132b39;
+  border: 1px solid #315468;
+  border-left: 3px solid #5dc4ba;
+  border-radius: 7px;
+}
+.deck-metric:nth-child(2) { border-left-color: var(--deck-amber); }
+.deck-metric:nth-child(3) { border-left-color: #6e9ce0; }
+.deck-metric:nth-child(4) { border-left-color: #cda2ef; }
+.deck-metric > span { color: #91b7c1; font-size: 10px; font-weight: 700; letter-spacing: .7px; }
+.deck-metric strong { display: flex; align-items: baseline; gap: 7px; margin-top: 5px; font: 700 26px/1.15 'Segoe UI',Arial,sans-serif; font-variant-numeric: tabular-nums; }
+.deck-metric small { color: #94afba; font-size: 11px; }
+.deck-disclaimer { margin: 0; color: #86a3ac; font-size: 10px; line-height: 1.45; }
+@media (max-width: 1050px) {
+  .flight-deck { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .deck-side-data { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0,1fr)); }
+  .deck-disclaimer { grid-column: 1 / -1; }
+  .deck-metric { padding: 10px; }
+  .deck-metric strong { font-size: 21px; }
+}
+@media (max-width: 600px) {
+  .flight-deck { grid-template-columns: minmax(0,1fr); padding: 10px; gap: 10px; }
+  .deck-side-data { grid-column: 1; grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .deck-disclaimer { grid-column: 1 / -1; }
+  .deck-instrument svg { width: min(100%,210px); }
+  .deck-metric strong { font-size: 22px; }
+  .field-map { width: 92px; }
+  .deck-instrument-title { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .flight-deck * { scroll-behavior: auto; } }
