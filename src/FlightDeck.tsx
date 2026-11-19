@@ -104,6 +104,7 @@ export function FlightDeck({ flight, field, course, onCourseChange, target, onTa
         <div className="deck-course-buttons"><span>CRS</span>
           <button type="button" title="Rotayı 5° azalt" onClick={() => onCourseChange(courseStep(course, -5))}>−5°</button>
           <button type="button" title="Rotayı pist istikametine sıfırla" onClick={() => onCourseChange(wrapHeading(field.runway.heading))}>RWY</button>
+          <button type="button" title="Seçili hedefe doğrudan rota" onClick={() => onCourseChange(wrapHeading(nav.bearing))}>DCT</button>
           <button type="button" title="Rotayı 5° artır" onClick={() => onCourseChange(courseStep(course, 5))}>+5°</button>
         </div>
       </div>
