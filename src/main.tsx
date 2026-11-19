@@ -532,8 +532,13 @@ function App() {
       setControllerMessage('Yatış, irtifa ve yön kollarını ortaya getir. Ortada durmasına rağmen değer yüksekse rehberli kalibrasyonu çalıştır.')
       return
     }
+    controls.current = { ...zero }
+    setSelectedPadIndex(pad.index)
     setControllerArmed(true)
-    setControllerMessage('Kumanda hazır. Paneli kapatıp Devam düğmesine bas.')
+    setPaused(false)
+    setShowSettings(false)
+    setControllerMessage('Kumanda etkinleştirildi. Uçuş başladı.')
+    simRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
   const joinRoom = async (code: string, isHost: boolean) => {
     const normalized = normalizeRoomCode(code)
