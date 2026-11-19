@@ -46,4 +46,12 @@ describe('legacy scene and modern physics bridge', () => {
     sim.reset({ aircraft: 'trainer1500' })
     expect(sim.assists.autoLevel).toBeGreaterThan(0)
   })
+  it('suppresses a stall advisory on the runway without hiding an airborne stall', () => {
+    const sim = newFlightSimulation('glider2000', 2)
+    sim.state.stalled = true
+    expect(toDisplayFlight(sim).stalled).toBe(false)
+    sim.state.onGround = false
+    sim.state.agl = 2
+    expect(toDisplayFlight(sim).stalled).toBe(true)
+  })
 })

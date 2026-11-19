@@ -24,7 +24,7 @@ export function toDisplayFlight(sim: Simulation): FlightState {
     yaw: a.yaw, pitch: a.pitch, roll: a.roll,
     rollRate: s.omega[0], pitchRate: s.omega[1], yawRate: s.omega[2],
     airspeed: s.airspeed, angleOfAttack: s.alpha,
-    crashed: s.crashed, stalled: s.stalled,
+    crashed: s.crashed, stalled: s.stalled && !s.onGround && s.agl > .6,
   }
 }
 
