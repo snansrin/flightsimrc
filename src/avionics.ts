@@ -61,7 +61,7 @@ export function navigationReadout(flight: FlightState, field: Field, selectedCou
   const offsetX = flight.position[0] - waypoint.x
   const offsetZ = flight.position[2] - waypoint.z
   const crossTrackMeters = offsetX * Math.cos(course * RAD) - offsetZ * Math.sin(course * RAD)
-  const cdi = clamp(-crossTrackMeters / 40, -2.5, 2.5)
+  const cdi = Math.abs(crossTrackMeters) < 0.00001 ? 0 : clamp(-crossTrackMeters / 40, -2.5, 2.5)
   const along = dx * Math.sin(course * RAD) + dz * Math.cos(course * RAD)
   return {
     heading, track, bearing, relativeBearing, course, courseRelative, cdi, crossTrackMeters,
