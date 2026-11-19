@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calibrationRange, calibrateAxis, defaultChannels, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, hasTravel, normalizeSource, observeTravel, readSource, type Travel } from './input'
+import { axisSignalSummary, calibrationRange, calibrateAxis, defaultChannels, defaultMapping, defaultTuning, detectMovedAxis, detectMovedSource, gamepadControls, hasTravel, normalizeSource, observeTravel, readSource, type Travel } from './input'
 
 const pad = (axes: number[]) => ({ axes }) as unknown as Gamepad
 
@@ -81,5 +81,28 @@ describe('guided setup', () => {
   it('fails to idle when the throttle report is missing or has not arrived', () => {
     expect(gamepadControls(pad([0, 0, NaN, 0]), defaultMapping).throttle).toBe(0)
     expect(gamepadControls(pad([]), defaultMapping).throttle).toBe(0)
+  })
+})
+
+
+describe('FPV rate tuning and signal health', () => {
+  it('distinguishes device-reported axes from received and moving axes', () => {
+    const ranges: (Travel | undefined)[] = []
+    observeTravel(ranges, [-1, -1, NaN, 0])
+    observeTravel(ranges, [-.5, -1, NaN, .01])
+    expect(axisSignalSummary([-.5, -1, NaN, .01], ranges)).toEqual({ reported: 4, received: 3, moving: 1 })
+  })
+  it('scales and clamps FPV rates without affecting throttle', () => {
+    const device = pad([.5, .5, 1, .5])
+    const normal = gamepadControls(device, defaultMapping)
+    const fast = gamepadControls(device, defaultMapping, { ...defaultTuning, rates: { aileron: 2, elevator: 2, rudder: 2 } })
+    expect(fast.aileron).toBeGreaterThan(normal.aileron)
+    expect(fast.elevator).toBeLessThan(normal.elevator)
+    expect(fast.throttle).toBe(normal.throttle)
+    expect(gamepadControls(pad([1, 1, 1, 1]), defaultMapping, { ...defaultTuning, rates: { aileron: 2, elevator: 2, rudder: 2 } }).aileron).toBe(1)
+  })
+  it('retains original behavior with a legacy profile missing rates', () => {
+    const legacy = { reversed: defaultTuning.reversed, deadzone: .06, expo: .2 } as typeof defaultTuning
+    expect(gamepadControls(pad([.4, 0, 1, 0]), defaultMapping, legacy)).toEqual(gamepadControls(pad([.4, 0, 1, 0]), defaultMapping, defaultTuning))
   })
 })
