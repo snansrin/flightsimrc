@@ -591,7 +591,7 @@ function App() {
   const movedAxes = signal.moving
   const t12d = /t12d/i.test(padName)
   const livePreview = padAxes.length || padButtons.length
-    ? gamepadControls({ axes: padAxes, buttons: padButtons.map(value => ({ value })) } as Gamepad, mapping, tuning, calibration)
+    ? gamepadControls({ axes: padAxes, buttons: padButtons.map(value => ({ value })) } as unknown as Gamepad, mapping, tuning, calibration)
     : null
   const field = fields[fieldIndex]
   const aircraft = hangarAircraft(vehicle)
