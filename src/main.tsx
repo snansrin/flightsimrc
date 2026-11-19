@@ -5,8 +5,11 @@ import { hasTravel, axisSignalSummary, observeTravel, validCalibration, type Tra
 import { hidApi, openHidController, type HidController, type HidDeviceLike } from './hid'
 import { hangar, hangarAircraft, soundFamily } from './hangar'
 import { fields } from './sim/fields'
+import { assistProfiles } from './sim/simulation'
 import { assessLesson, beginLesson, lessons, type Lesson, type LessonRun } from './school'
 import { FieldMap } from './scene/FieldMap'
+import { FlightDeck } from './FlightDeck'
+import { type NavTarget } from './avionics'
 import type { CameraMode } from './scene/FlightScene'
 import { applyDisplayControls, newFlightSimulation, physicsFieldId, toDisplayFlight } from './sim/bridge'
 import { EngineAudio } from './audio'
@@ -70,6 +73,10 @@ function App() {
   const keys = useRef(new Set<string>())
   const [hud, setHud] = useState(toDisplayFlight(simulation.current))
   const [fieldIndex, setFieldIndex] = useState(0)
+  const [deckVisible, setDeckVisible] = useState(true)
+  const [navTarget, setNavTarget] = useState<NavTarget>('runway')
+  const [course, setCourse] = useState(0)
+  const [assistMode, setAssistMode] = useState('model')
   const [mapping, setMapping] = useState<Mapping>(defaultMapping)
   const [auxiliary, setAuxiliary] = useState<InputSource[]>([])
   const [auxReversed, setAuxReversed] = useState<boolean[]>([])
@@ -118,6 +125,11 @@ function App() {
   const pilotId = useRef(crypto.randomUUID())
   const roomFlight = useRef({ vehicle, fieldIndex })
   roomFlight.current = { vehicle, fieldIndex }
+  useEffect(() => {
+    engine.assists = assistMode === 'model'
+      ? { ...engine.spec.assists }
+      : { ...engine.spec.assists, ...assistProfiles[Number(assistMode)] }
+  }, [engine, vehicle, assistMode])
   const attachHid = async (device: HidDeviceLike) => {
     if (pendingHid.current.has(device) || hidControllers.current.some(controller => controller.device === device)) return
     pendingHid.current.add(device)
@@ -298,7 +310,7 @@ function App() {
           accumulator -= 1 / 60
         }
       }
-      sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed, paused || flight.current.crashed)
+      sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed, paused || flight.current.crashed, flight.current.engineSpeed)
       if (now - display > 100) { setHud({ ...flight.current }); if (lessonRun.current) setLessonHud({ ...lessonRun.current }); setPadAxes(pad ? [...pad.axes] : []); setAxisTravel(travel.current.axes.map(range => range && { ...range })); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
       frame = requestAnimationFrame(tick)
     }
@@ -314,6 +326,7 @@ function App() {
       field: physicsFieldId(nextField),
       airborne: lesson && 'airborne' in lesson ? lesson.airborne : undefined,
     })
+    if (assistMode !== 'model') engine.assists = { ...engine.spec.assists, ...assistProfiles[Number(assistMode)] }
     flight.current = toDisplayFlight(engine)
     controls.current = { ...zero }
     keys.current.clear()
@@ -607,7 +620,7 @@ function App() {
             peers={peers.filter(pilot => pilot.field === fieldIndex)} />
         </Suspense>
         <div className="scene-label"><strong>{field.name}</strong><span>{field.weather.windSpeed.toFixed(1)} m/s · {field.weather.windDirection}° · {field.runway.length} m pist</span></div>
-        <FieldMap field={field} flight={hud} />
+        <FieldMap field={field} flight={hud} target={navTarget} />
         {cameraMode === 'onboard' && <div className="crosshair" aria-hidden="true">+</div>}
         {hud.crashed && <div className="crash"><strong>Uçuş sona erdi</strong><span>{engine.state.crashReason || 'Araç kaza yaptı.'}</span><button onClick={retry}>Yeniden başla</button></div>}
         {hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}
@@ -625,6 +638,7 @@ function App() {
           <small>{lessonHud.status === 'active' ? Math.ceil(Math.max(0, lessonHud.lesson.timeout - lessonHud.elapsed)) + ' sn kaldı' : lessonHud.message}</small>
         </div>}
       </div>
+      {deckVisible && <FlightDeck flight={hud} field={field} course={course} onCourseChange={setCourse} target={navTarget} onTargetChange={setNavTarget} />}
       <div className="toolbar">
         <label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value; setVehicle(next); reset(next) }}>
           {hangar.map(({ id, spec }) => <option key={id} value={id}>{spec.name} · {spec.category}</option>)}
@@ -633,12 +647,19 @@ function App() {
           const nextField = Number(e.target.value)
           const nextVehicle = fields[nextField].runway.surface === 'water' ? 'float1200' : vehicle
           setFieldIndex(nextField)
+          setCourse(fields[nextField].runway.heading)
+          setNavTarget('runway')
           setVehicle(nextVehicle)
           reset(nextVehicle, nextField)
         }}>
           {fields.map((entry, index) => <option value={index} key={entry.id}>{entry.name}</option>)}
         </select></label>
+        <label className="assist-choice">UÇUŞ MODU <select value={assistMode} onChange={e => setAssistMode(e.target.value)}>
+          <option value="model">Modele özel</option>
+          {assistProfiles.map((profile, index) => <option key={index} value={String(index)}>{profile.label}</option>)}
+        </select></label>
         <div>
+          <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'Göstergeleri gizle' : 'ADI / HSI aç'}</button>
           <label className="camera-choice">GÖRÜŞ <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}>
             <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option>
           </select></label>
