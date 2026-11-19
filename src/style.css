@@ -230,3 +230,19 @@ main{display:flex;flex-direction:column}header{order:0}.sim{order:1;margin-top:2
 @media (prefers-reduced-motion: reduce) {
   .signal-cursor, .signal-travel { transition: none; }
 }
+
+/* One-step flight entry is independent of the optional calibration wizard. */
+.quick-flight-hint { margin: 15px 0 8px; font-size: 12px; color: #b4c8ca; }
+.overlay .quick-flight {
+  display: block;
+  width: 100%;
+  margin: 6px 0 18px;
+  border-radius: 6px;
+  padding: 13px 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.quick-flight:focus-visible {
+  outline: 2px solid #fff3db;
+  outline-offset: 3px;
+}
