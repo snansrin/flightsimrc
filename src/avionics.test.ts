@@ -38,6 +38,11 @@ describe('local HSI navigation', () => {
     expect(eastbound.relativeBearing).toBe(-90)
     expect(eastbound.courseRelative).toBe(-90)
   })
+  it('does not invent an ETA when flying away from the selected waypoint', () => {
+    const outbound = navigationReadout(flight([0, 20, -100], 0, [0, 0, -12]), field, 0, 'runway')
+    expect(outbound.groundspeed).toBe(12)
+    expect(outbound.etaSeconds).toBeNull()
+  })
   it('uses an independent local approach waypoint and does not invent an ETA at standstill', () => {
     const wp = localWaypoint(field, 'approach')
     expect(wp.z).toBeLessThan(0)
