@@ -134,6 +134,11 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
     })}
     {spec.gear.filter(gear => gear.kind === 'wheel' || gear.kind === 'float').map(gear => {
       const [forward, right, down] = gear.position
+      if (gear.kind === 'float' && gear.steering) {
+        return <mesh key={gear.id} position={[right, -down + .025, forward]} castShadow>
+          <boxGeometry args={[.009, .09, .052]} /><meshStandardMaterial color={visual.trim} metalness={.28} />
+        </mesh>
+      }
       return gear.kind === 'float'
         ? <mesh key={gear.id} position={[right, -down, forward]} scale={[radius * .7, .048, length * .33]} castShadow>
           <sphereGeometry args={[1, 20, 10]} /><meshStandardMaterial color={visual.accent} />

@@ -36,4 +36,14 @@ describe('field and aircraft interaction', () => {
     expect(onWater.state.agl).toBeLessThan(.5)
     expect(onWater.state.crashed).toBe(false)
   })
+
+  it('makes the stern water rudder turn the nose in the commanded direction', () => {
+    const sim = new Simulation({ aircraft: 'float1200', field: 'ada' })
+    const state = { ...sim.state, position: [0, .275, 0] as [number, number, number], velocity: [0, 0, -5] as [number, number, number] }
+    const right = groundContact(sim.spec, state, { ...zeroControls(), rudder: 1 }, sim.env, 1 / 240)
+    const left = groundContact(sim.spec, state, { ...zeroControls(), rudder: -1 }, sim.env, 1 / 240)
+    expect(right.inWater).toBe(true)
+    expect(right.momentBody[2]).toBeGreaterThan(0)
+    expect(left.momentBody[2]).toBeLessThan(0)
+  })
 })

@@ -360,7 +360,7 @@ export const aircraftCatalog: AircraftSpec[] = [
     gear: [
       { ...wheel('float-left', [0.02, -0.17, 0.24], { kind: 'float', radius: 0.04, stiffness: 3200, damping: 90, grip: 0.12, rollingResistance: 0.09 }) },
       { ...wheel('float-right', [0.02, 0.17, 0.24], { kind: 'float', radius: 0.04, stiffness: 3200, damping: 90, grip: 0.12, rollingResistance: 0.09 }) },
-      { ...wheel('float-tail', [-0.4, 0, 0.2], { kind: 'float', radius: 0.02, stiffness: 1800, damping: 50, grip: 0.2, rollingResistance: 0.1, steering: 0.4 }) },
+      { ...wheel('float-tail', [-0.4, 0, 0.264], { kind: 'float', radius: 0.02, stiffness: 1800, damping: 50, grip: 0.48, rollingResistance: 0.1, steering: 0.55 }) },
       { ...wheel('tip-left', [-0.02, -0.59, -0.1], { kind: 'tip', radius: 0.01, stiffness: 8000, grip: 0.4 }) },
       { ...wheel('tip-right', [-0.02, 0.59, -0.1], { kind: 'tip', radius: 0.01, stiffness: 8000, grip: 0.4 }) },
     ],

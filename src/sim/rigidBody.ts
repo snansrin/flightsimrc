@@ -108,7 +108,7 @@ export function groundContact(spec: AircraftSpec, state: SimState, controls: Con
     if (gear.kind === 'belly' && length(pointVelocity) > 8) result.bellyStrike = true
 
     const tangent = sub(pointVelocity, scale(normal, vn))
-    const steerAngle = gear.steering * controls.rudder
+    const steerAngle = gear.steering * controls.rudder * (r[0] < 0 ? -1 : 1)
     const rollAxis = normalize(qRotate(state.attitude, [Math.cos(steerAngle), Math.sin(steerAngle), 0]))
     const rollDir = normalize(sub(rollAxis, scale(normal, dot(rollAxis, normal))))
     const traction = env.groundTraction?.(world[0], world[2])
