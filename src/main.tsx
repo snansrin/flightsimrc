@@ -10,6 +10,7 @@ import { FieldMap } from './scene/FieldMap'
 import type { CameraMode } from './scene/FlightScene'
 import { applyDisplayControls, newFlightSimulation, physicsFieldId, toDisplayFlight } from './sim/bridge'
 import { EngineAudio } from './audio'
+import { ControllerSignalRow } from './ControllerSignalRow'
 import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
 import './style.css'
 
@@ -625,7 +626,19 @@ function App() {
       }}>Kol testini sıfırla</button>
       {t12d && movedAxes < 4 && <p>T12D: Windows joy.cpl ekranında da eksenler sabitse sorun site eşlemesi değildir. Kumandada MONITOR ekranında CH1–CH4 hareketini kontrol et; ardından TRAINER → STATE → INH, üreticinin joystick kalibrasyonu ve USB simülatör uyumlu firmware sürümünü doğrula. CH1–CH4 burada hareket ediyorsa fakat Windows ve WEBHID sabitse veri aktarımını üretici desteğiyle kontrol et.</p>}
       {signal.reported > 0 && signal.moving === 0 && <p role="status">Joystick hareketi henüz algılanmadı. Kol testini sıfırla, tüm kolları hareket ettir ve gerekirse USB HID kumandası bağla. Bu panel Windows/firmware kaynaklı eksik sinyali üretemez.</p>}
-    </div><div className="axis-monitor"><strong>CANLI GİRDİLER · {padName.includes(" · HID ") ? "WEBHID" : "GAMEPAD"} · {padAxes.length} EKSEN / {padButtons.length} DÜĞME</strong>{padAxes.length ? padAxes.map((value, i) => <div key={i}>Eksen {i + 1}<meter min={-1} max={1} value={Number.isFinite(value) ? value : 0} />{Number.isFinite(value) ? value.toFixed(2) : "Sinyal bekleniyor"}<small className={hasTravel(axisTravel[i]) ? "axis-moved" : "axis-still"}>{hasTravel(axisTravel[i]) ? `${axisTravel[i]!.min.toFixed(2)} … ${axisTravel[i]!.max.toFixed(2)}` : "Sabit"}</small></div>) : <p>Eksen görünmüyor.</p>}{padButtons.map((value, i) => <div key={`button-${i}`}>Düğme {i + 1}<meter min={0} max={1} value={Number.isFinite(value) ? value : 0} />{Number.isFinite(value) ? value.toFixed(2) : "Sinyal bekleniyor"}</div>)}</div><div className="setup-card">
+    </div><div className="axis-monitor">
+      <div className="signal-panel-head">
+        <strong>CANLI GİRDİLER · {padName.includes(' · HID ') ? 'WEBHID' : 'GAMEPAD'}</strong>
+        <span>{padAxes.length} eksen / {padButtons.length} düğme</span>
+      </div>
+      <p className="signal-legend">Turuncu işaret canlı konum, yeşil alan ölçülen hareket aralığıdır. Ortadaki çizgi sıfırı gösterir.</p>
+      {padAxes.length ? padAxes.map((value, i) =>
+        <ControllerSignalRow key={`axis-${i}`} kind="axis" index={i} value={value} travel={axisTravel[i]} />
+      ) : <p>Eksen görünmüyor.</p>}
+      {padButtons.map((value, i) =>
+        <ControllerSignalRow key={`button-${i}`} kind="button" index={i} value={value} />
+      )}
+    </div><div className="setup-card">
       {setup ? <>
         <strong>{setup.index + 1} / 4 · {flightChannels[setup.index].name}</strong>
         <p>Kolu {setup.source ? flightChannels[setup.index].negative : flightChannels[setup.index].positive} götür, orada tut ve kaydet.</p>
