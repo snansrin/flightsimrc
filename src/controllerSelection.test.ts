@@ -35,9 +35,11 @@ describe('automatic RC controller selection', () => {
   it('does not change automatic selection due to stick motion alone', () => {
     const pads = [radiolinkHid, keyboardHid]
     expect(choosePreferredPad(pads, null)?.id).toBe(radiolinkHid.id)
-    keyboardHid.axes[4] = 1
-    radiolinkHid.axes[1] = -.8
-    expect(choosePreferredPad(pads, null)?.id).toBe(radiolinkHid.id)
+    const movedPads = [
+      { ...radiolinkHid, axes: [0, -.8, ...Array(6).fill(0)] },
+      { ...keyboardHid, axes: [0, 0, 0, 0, 1, ...Array(27).fill(0)] },
+    ]
+    expect(choosePreferredPad(movedPads, null)?.id).toBe(radiolinkHid.id)
   })
 
   it('still supports generic gamepads and handles no connected devices', () => {
