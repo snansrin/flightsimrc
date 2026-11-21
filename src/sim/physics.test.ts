@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aircraftById } from './catalog'
-import { stallSpeed } from './aero'
+import { aerodynamics, chordReynolds, coefficients, propellerState, stallSpeed } from './aero'
 import { attitudeEuler, attitudeQuat, qRotate, deg, rad } from './math'
 import { Simulation } from './simulation'
 import { formatMeasurements, measureHover, measureTakeoff, measureTrim, verifyAirframe, verifyAll } from './verify'
@@ -30,6 +30,40 @@ describe('attitude maths', () => {
 
 describe('fixed wing physics', () => {
   const trainer = aircraftById('trainer1500')
+
+  it('models higher profile drag and reduced peak lift for small chords at low speed', () => {
+    const wing = trainer.surfaces[0]
+    const fast = chordReynolds(1.225, 15, trainer.chord, 288)
+    const slow = chordReynolds(1.225, 5, 0.1, 288)
+    expect(fast).toBeGreaterThan(200000)
+    expect(coefficients(rad(12), wing, 6, 0, 0, 0, slow).cl)
+      .toBeLessThan(coefficients(rad(12), wing, 6, 0, 0, 0, fast).cl)
+    expect(coefficients(0, wing, 6, 0, 0, 0, slow).cd)
+      .toBeGreaterThan(coefficients(0, wing, 6, 0, 0, 0, fast).cd)
+  })
+
+  it('uses the full wing aspect ratio without tilting lift into forward thrust at positive incidence', () => {
+    const sim = new Simulation({ aircraft: trainer.id, airborne: { altitude: 100, airspeed: 18 } })
+    const surface = { ...trainer.surfaces[0], dihedral: 0 }
+    const spec = { ...trainer, surfaces: [surface] }
+    const state = { ...sim.state, rpm: 0, velocity: qRotate(sim.state.attitude, [18, 0, 0]) }
+    const env = { ...sim.env, wind: [0, 0, 0] as [number, number, number] }
+    const polar = coefficients(surface.incidence, surface, spec.span ** 2 / spec.wingArea, 0, 0, 0,
+      chordReynolds(env.density, 18, spec.chord, env.temperature))
+    const result = aerodynamics(spec, state, zeroControls(), env)
+    expect(result.lift).toBeGreaterThan(0)
+    expect(result.force[0]).toBeCloseTo(-result.drag, 6)
+    expect(result.drag).toBeCloseTo(.5 * env.density * 18 ** 2 * surface.area * polar.cd, 5)
+  })
+
+  it('reduces propeller thrust, torque and added airflow with forward speed', () => {
+    const stopped = propellerState(trainer, 0.7, 0, 1.225)
+    const moving = propellerState(trainer, 0.7, 12, 1.225)
+    expect(moving.thrust).toBeLessThan(stopped.thrust)
+    expect(moving.torque).toBeLessThan(stopped.torque)
+    expect(moving.slipstream).toBeGreaterThan(0)
+    expect(moving.slipstream).toBeLessThan(stopped.slipstream)
+  })
 
   it('sits on the gear without sinking or exploding', () => {
     const sim = new Simulation({ aircraft: 'trainer1500', field: 'anadolu' })

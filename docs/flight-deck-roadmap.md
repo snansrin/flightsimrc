@@ -12,6 +12,10 @@ The 2016 Sentinel mosaic has roughly 10 m source imagery. Land cover and buildin
 
 The world picker has a labeled street map alongside the satellite layer. At the closest terrain detail level, tiles wholly inside the contiguous United States request a higher-resolution USGS aerial image using the same Web Mercator bounds. If that request fails or takes too long, the scene uses Sentinel imagery. The coverage check uses a simplified public-domain Natural Earth boundary.
 
+Near the aircraft, OpenMapTiles water polygons and major road lines provide a shading mask over the same elevation mesh. Water has animated ripples and view-dependent reflection. Road shading keeps the underlying aerial image visible and excludes mapped bridges and tunnels. This visual layer loads alongside the photos and uses the shared vector tile cache. Water boundaries and road position depend on source coverage and do not change collision or landing surfaces.
+
+During flight the renderer keeps the active terrain visible while loading its replacement. Terrain mesh production, building footprints, vegetation and surface masks share a time budget on the render thread. Meshes stay cached until their elevation or stitch configuration changes. The aircraft and camera interpolate between the 60 Hz display poses, while the flight engine continues to integrate at 240 Hz.
+
 ## Training imagery
 
 All eight training scenes use bundled aerial imagery. The seven exercise presets overlay their existing simulator runway dimensions and terrain profiles on the real photographs below. Chatfield also uses a measured elevation model and a reconstruction of the model aircraft strip. The place name in the simulator identifies the photograph's source geography.
@@ -34,7 +38,15 @@ Use **Uçak seç** above the flight view to open the 3D hangar. Drag the aircraf
 
 The previews use the same meshes as flight. Drone motor spacing and rotor size follow the aircraft class. The Viper shows an animated fan in the exhaust, the T-28 has a detailed cowling, and retractable wheels include cover panels. Engine audio uses separate harmonic profiles for propeller, EDF, helicopter and multicopter. Ground-pilot mode adds stereo movement, distance filtering and Doppler. The sound is generated with Web Audio and uses simulated engine speed.
 
-The fixed-wing models use aircraft-specific fuselage cross-sections, swept tail meshes, fitted canopies and independent hinged surfaces. The Viper includes intake and exhaust geometry, the T‑28 has a radial cowling and a three-blade propeller. Select **Model inceleme** in **Görüş** for a close three-quarter view. Aerodynamic and controller settings are shared with the existing aircraft.
+The Viper, T-28 and Extra have modeled seats and instrument panels under transparent glazing. Fixed-wing meshes include model-dependent wingtip shaping, close-range panel seams and fasteners, and round-profile tires. The hangar adds a reflected studio environment on clear-coated paint and glass.
+
+The fixed-wing models use aircraft-specific fuselage cross-sections, wing tips, swept tail meshes and independent hinged surfaces. Clear canopies show seats and panels on the Viper, T‑28 and Extra. The Viper includes intake and exhaust geometry, and the T‑28 has a radial cowling and a three-blade propeller. Select **Model inceleme** in **Görüş** for a close three-quarter view.
+
+## Aerodynamics
+
+Local airflow at each surface includes the aircraft's angular motion, wind and propeller slipstream. Chord, air viscosity and speed set an estimated Reynolds correction to profile drag and peak lift. The two wing halves share the overall aspect ratio for induced drag. Panels apply lift perpendicular to their airflow, and separated flow blends toward a flat-plate response. Propeller thrust, torque and slipstream change with forward airspeed. The model uses each airframe's existing catalogue mass, geometry and propulsion values.
+
+The Reynolds and propeller curves are engineering estimates. The [UIUC low-speed airfoil archive](https://m-selig.ae.illinois.edu/uiuc_lsat.html) and [UIUC propeller database](https://m-selig.ae.illinois.edu/props/propDB.html) describe relevant measurement ranges and methods. Individual FlightSimRC airframes have not been matched to measured flight or bench data. Run `npm run verify:flight` for the scenario report.
 
 - [EOxCloudless data and license](https://cloudless.eox.at/documentation/license)
 - [Mapzen/AWS elevation data and attribution](https://registry.opendata.aws/terrain-tiles/)

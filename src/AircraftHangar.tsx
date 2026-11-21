@@ -1,12 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
-import { Canvas } from '@react-three/fiber'
-import { ACESFilmicToneMapping, MathUtils } from 'three'
+import { Canvas, useThree } from '@react-three/fiber'
+import { ACESFilmicToneMapping, MathUtils, PMREMGenerator } from 'three'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import type { Controls } from './flight'
 import { hangar, hangarAircraft } from './hangar'
 import { VehicleModel } from './scene/Vehicles'
 
 const initialView = { yaw: -.5, pitch: -.04, zoom: 1 }
 const idle = { current: { throttle: 0, aileron: 0, elevator: 0, rudder: 0 } as Controls }
+
+function HangarLighting() {
+  const { scene, gl, invalidate } = useThree()
+  useEffect(() => {
+    const room = new RoomEnvironment()
+    const generator = new PMREMGenerator(gl)
+    const light = generator.fromScene(room, .048)
+    const previous = scene.environment
+    const intensity = scene.environmentIntensity
+    scene.environment = light.texture
+    scene.environmentIntensity = .53
+    room.dispose()
+    generator.dispose()
+    invalidate()
+    return () => {
+      scene.environment = previous
+      scene.environmentIntensity = intensity
+      light.dispose()
+    }
+  }, [scene, gl, invalidate])
+  return null
+}
 
 export default function AircraftHangar({ active, onClose, onSelect }: {
   active: string; onClose: () => void; onSelect: (id: string) => void;
@@ -63,6 +86,7 @@ export default function AircraftHangar({ active, onClose, onSelect }: {
         >
           <Canvas frameloop="demand" dpr={[1, 1.5]} shadows camera={{ position: [0, 1.48, 3.8], fov: 38 }}
             gl={{ antialias: true, alpha: true, toneMapping: ACESFilmicToneMapping }}>
+            <HangarLighting />
             <hemisphereLight args={['#eff6ff', '#81939d', 1.6]} />
             <directionalLight position={[1, 4, 3]} intensity={2} castShadow shadow-mapSize={[1024, 1024]} />
             <directionalLight position={[-3, 1, -3]} intensity={1.65} color="#b5d9ff" />

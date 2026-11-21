@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { FlightState } from '../flight'
 import { coarseEdgeHeight, coarserNeighbor, terrainSubdivisions, terrainTiles, tileKey, type Tile, type WorldTerrain } from '../sim/worldTerrain'
 import { WorldBuildings } from './WorldBuildings'
 import { addGroundGrain } from './groundAppearance'
+import { loadSurfaceMask, surfaceShader } from './terrainSurface'
+import { sliceSceneWork } from './sceneWork'
 
 type TileAsset = { tile: Tile; map: THREE.Texture | null }
+type RenderTile = { asset: TileAsset; geometry: THREE.BufferGeometry; signature: string }
+const directions = [[0, -1], [0, 1], [-1, 0], [1, 0]] as const
 const interval = .55
 
 async function tileTexture(world: WorldTerrain, tile: Tile) {
@@ -19,12 +23,11 @@ async function tileTexture(world: WorldTerrain, tile: Tile) {
   return map
 }
 
-function terrainGeometry(world: WorldTerrain, tile: Tile, visible: ReadonlySet<string>) {
+function* terrainGeometry(world: WorldTerrain, tile: Tile, edgesAtLod: (Tile | undefined)[]) {
   const subdivisions = terrainSubdivisions(tile.z)
   const points: number[] = [], uv: number[] = [], index: number[] = []
   const n = 2 ** tile.z, stride = subdivisions + 1
-  const top = coarserNeighbor(tile, 0, -1, visible), bottom = coarserNeighbor(tile, 0, 1, visible)
-  const left = coarserNeighbor(tile, -1, 0, visible), right = coarserNeighbor(tile, 1, 0, visible)
+  const [top, bottom, left, right] = edgesAtLod
   for (let row = 0; row <= subdivisions; row++) {
     for (let col = 0; col <= subdivisions; col++) {
       const u = col / subdivisions, v = row / subdivisions
@@ -41,6 +44,7 @@ function terrainGeometry(world: WorldTerrain, tile: Tile, visible: ReadonlySet<s
       const p = row * stride + col
       index.push(p - stride - 1, p - stride, p, p - stride - 1, p, p - 1)
     }
+    yield
   }
 
   // Skirts seal the edge where adjacent elevation levels use different sample spacing.
@@ -102,13 +106,26 @@ function EarthSky() {
   </mesh>
 }
 
-function GroundTile({ world, asset, visible }: { world: WorldTerrain; asset: TileAsset; visible: ReadonlySet<string> }) {
-  const geometry = useMemo(() => terrainGeometry(world, asset.tile, visible), [world, asset, visible])
-  useEffect(() => () => geometry.dispose(), [geometry])
+function GroundTile({ world, renderTile, detailed, clock }: {
+  world: WorldTerrain; renderTile: RenderTile; detailed: boolean; clock: { value: number };
+}) {
+  const { asset, geometry } = renderTile
+  const [mask, setMask] = useState<THREE.Texture | null>(null)
+  useEffect(() => {
+    if (!detailed) { setMask(null); return }
+    const request = new AbortController()
+    let texture: THREE.Texture | null = null
+    void loadSurfaceMask(asset.tile, world.scale, request.signal).then(result => {
+      if (request.signal.aborted) result?.dispose()
+      else { texture = result; setMask(result) }
+    }).catch(() => { /* Satellite imagery still covers the tile. */ })
+    return () => { request.abort(); texture?.dispose() }
+  }, [asset.tile, detailed, world.scale])
+  const appearance = useMemo(() => mask ? surfaceShader(mask, clock) : addGroundGrain, [mask, clock])
   return <mesh geometry={geometry}>
-    <meshLambertMaterial map={asset.map} color={asset.map ? '#eaf0e6' : '#6d776c'}
+    <meshLambertMaterial key={mask ? 'surface' : 'imagery'} map={asset.map} color={asset.map ? '#eaf0e6' : '#6d776c'}
       emissiveMap={asset.map} emissive={asset.map ? '#ffffff' : '#000000'} emissiveIntensity={.28} side={THREE.DoubleSide}
-      onBeforeCompile={addGroundGrain} />
+      onBeforeCompile={appearance} />
   </mesh>
 }
 
@@ -116,36 +133,47 @@ export function EarthTerrain({ world, flight, onImagery }: {
   world: WorldTerrain; flight: React.RefObject<FlightState>; onImagery: (state: 'loading' | 'ready' | 'unavailable') => void
 }) {
   const [patch, setPatch] = useState(() => terrainTiles(world.origin.x, world.origin.y))
-  const [assets, setAssets] = useState<TileAsset[]>([])
-  const visible = useMemo(() => new Set(assets.map(({ tile }) => tileKey(tile))), [assets])
+  const [tiles, setTiles] = useState<RenderTile[]>([])
+  const detail = useMemo(() => tiles.map(entry => entry.asset).filter(asset => asset.tile.z === 14).slice(0, 9), [tiles])
+  const detailedKeys = useMemo(() => new Set(detail.map(({ tile }) => tileKey(tile))), [detail])
+  const surfaceTime = useMemo(() => ({ value: 0 }), [])
   const cache = useRef(new Map<string, TileAsset>())
+  const readyMeshes = useRef(new Map<string, RenderTile>())
+  const preloadedTextures = useRef(new WeakSet<THREE.Texture>())
+  const published = useRef<RenderTile[]>([])
   const requests = useRef(new Map<string, Promise<TileAsset | null>>())
   const alive = useRef(true)
   const filled = useRef(false)
   const lastUpdate = useRef({ time: -Infinity, x: 0, z: 0 })
+  const gl = useThree(state => state.gl)
   useFrame(({ clock }) => {
     const time = clock.elapsedTime, [x, , z] = flight.current.position
+    surfaceTime.value = time
     const previous = lastUpdate.current
     if (time - previous.time < interval || Math.hypot(x - previous.x, z - previous.z) < 330) return
     lastUpdate.current = { time, x, z }
     const point = world.toMercator(x, -z)
     const next = terrainTiles(point.x, point.y)
-    setPatch(current => current.length === next.length && current.every((tile, index) => tileKey(tile) === tileKey(next[index]))
-      ? current : next)
+    const keys = new Set(next.map(tileKey))
+    setPatch(current => current.length === next.length && current.every(tile => keys.has(tileKey(tile))) ? current : next)
   })
 
   useEffect(() => {
     alive.current = true
     return () => {
       alive.current = false
+      for (const tile of readyMeshes.current.values()) tile.geometry.dispose()
+      readyMeshes.current.clear()
       for (const asset of cache.current.values()) asset.map?.dispose()
       cache.current.clear()
     }
   }, [])
 
   useEffect(() => {
-    let active = true
+    const requestScope = new AbortController()
+    const { signal } = requestScope
     const required = new Set(patch.map(tileKey))
+    const previousAssets = new Set(published.current.map(tile => tile.asset))
     const load = (tile: Tile) => {
       const key = tileKey(tile)
       const ready = cache.current.get(key)
@@ -162,40 +190,76 @@ export function EarthTerrain({ world, flight, onImagery }: {
       requests.current.set(key, request)
       return request
     }
-    const publish = () => {
+    const publish = async () => {
       const next = patch.flatMap(tile => {
         const asset = cache.current.get(tileKey(tile))
         return asset ? [asset] : []
       })
-      setAssets(previous => !next.length || (next.length === previous.length && next.every((asset, index) => asset === previous[index]))
-        ? previous : next)
+      const visible = new Set(next.map(({ tile }) => tileKey(tile)))
+      const rendered: RenderTile[] = []
+      for (const asset of next) {
+        const borders = directions.map(([dx, dy]) => coarserNeighbor(asset.tile, dx, dy, visible))
+        const borderState = borders.map(tile => tile ? tileKey(tile) + ':' + world.elevationNeighbors(tile) : '-').join('|')
+        const signature = tileKey(asset.tile) + '/' + world.elevationNeighbors(asset.tile) + '/' + borderState
+        let tile = readyMeshes.current.get(signature)
+        if (!tile || tile.asset !== asset) {
+          const geometry = await sliceSceneWork(terrainGeometry(world, asset.tile, borders), signal)
+          if (signal.aborted) { geometry.dispose(); return }
+          if (asset.map && !preloadedTextures.current.has(asset.map)) {
+            try { gl.initTexture(asset.map) } catch { /* The material may upload it on first use. */ }
+            preloadedTextures.current.add(asset.map)
+          }
+          tile = { asset, geometry, signature }
+          readyMeshes.current.set(signature, tile)
+        }
+        rendered.push(tile)
+      }
+      if (signal.aborted || !rendered.length) return
+      const previous = published.current
+      if (rendered.length === previous.length && rendered.every((tile, index) => tile === previous[index])) return
+      published.current = rendered
+      setTiles(rendered)
+      const keep = new Set(previous.concat(rendered).map(tile => tile.signature))
+      for (const [key, tile] of readyMeshes.current) {
+        if (readyMeshes.current.size <= 144) break
+        if (!keep.has(key)) { tile.geometry.dispose(); readyMeshes.current.delete(key) }
+      }
     }
     async function stream() {
       if (!filled.current) {
         const starter = await load(world.startTile)
-        if (!active) return
-        publish()
+        if (signal.aborted) return
+        await publish()
+        if (signal.aborted) return
         onImagery(starter?.map ? 'ready' : 'unavailable')
       }
       const missing = patch.filter(tile => !cache.current.has(tileKey(tile)))
-      for (let i = 0; i < missing.length && active; i += 7) {
+      for (let i = 0; i < missing.length && !signal.aborted; i += 7) {
         await Promise.all(missing.slice(i, i + 7).map(load))
-        if (active && !filled.current) publish()
+        if (!signal.aborted && !filled.current) await publish()
       }
-      if (!active) return
-      publish()
+      if (signal.aborted) return
+      await publish()
+      if (signal.aborted) return
       filled.current = true
       onImagery(patch.some(tile => cache.current.get(tileKey(tile))?.map) ? 'ready' : 'unavailable')
+      const staleAssets = new Set<TileAsset>()
       for (const [key, asset] of cache.current) {
         if (cache.current.size <= 112) break
-        if (required.has(key)) continue
+        if (required.has(key) || previousAssets.has(asset)) continue
         asset.map?.dispose()
         cache.current.delete(key)
+        staleAssets.add(asset)
+      }
+      for (const [key, tile] of readyMeshes.current) {
+        if (!staleAssets.has(tile.asset)) continue
+        tile.geometry.dispose()
+        readyMeshes.current.delete(key)
       }
     }
-    void stream()
-    return () => { active = false }
-  }, [world, patch, onImagery])
+    void stream().catch(error => { if (!signal.aborted) console.warn('Terrain streaming:', error) })
+    return () => requestScope.abort()
+  }, [world, patch, onImagery, gl])
 
   return <>
     <color attach="background" args={['#a8c6dc']} />
@@ -203,8 +267,9 @@ export function EarthTerrain({ world, flight, onImagery }: {
     <EarthSky />
     <hemisphereLight args={['#eff8ff', '#8a9287', 2.05]} />
     <directionalLight position={[-24, 45, -30]} intensity={1.25} />
-    {assets.map(asset => <GroundTile key={tileKey(asset.tile)} world={world} asset={asset} visible={visible} />)}
-    {assets.filter(asset => asset.tile.z === 14).slice(0, 4).map(({ tile }) =>
+    {tiles.map(tile => <GroundTile key={tileKey(tile.asset.tile)} world={world} renderTile={tile}
+      detailed={detailedKeys.has(tileKey(tile.asset.tile))} clock={surfaceTime} />)}
+    {detail.slice(0, 4).map(({ tile }) =>
       <WorldBuildings key={tileKey(tile)} world={world} tile={tile} />)}
   </>
 }

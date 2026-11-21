@@ -1,5 +1,5 @@
 import {
-  add, clamp, cross, dot, length, scale, sigmoid,
+  add, clamp, cross, dot, length, scale, smoothstep,
   type Quat, type Vec3, qConj, qRotate,
 } from './math'
 import type { AircraftSpec, Controls, Environment, SimState, Surface } from './types'
@@ -12,24 +12,34 @@ import type { AircraftSpec, Controls, Environment, SimState, Surface } from './t
  * Coefficients here are engineering estimates for the RC class, not measured airframe data.
  */
 
-export type Coefficients = { cl: number; cd: number; postStall: number }
+export type Coefficients = { cl: number; cd: number; induced: number; postStall: number }
+
+/** Local chord Reynolds number using Sutherland viscosity for dry air. */
+export function chordReynolds(density: number, speed: number, chord: number, temperature: number) {
+  const kelvin = clamp(temperature, 190, 330)
+  const viscosity = 1.716e-5 * (kelvin / 273.15) ** 1.5 * (273.15 + 110.4) / (kelvin + 110.4)
+  return density * speed * chord / viscosity
+}
 
 /** Airfoil polar with smooth post-stall blend to flat plate. */
-export function coefficients(alpha: number, surface: Surface, aspect: number, clExtra = 0, cdExtra = 0, stallShift = 0): Coefficients {
+export function coefficients(alpha: number, surface: Surface, aspect: number,
+  clExtra = 0, cdExtra = 0, stallShift = 0, reynolds = 160000): Coefficients {
   const a = alpha
   const stall = Math.max(0.12, surface.alphaStall + stallShift)
   const width = Math.max(0.02, surface.stallWidth)
-  const postStall = sigmoid((Math.abs(a) - stall) / width)
+  const postStall = smoothstep(stall - width * .20, stall + width * 1.25, Math.abs(a))
+  const lowRe = 1 - smoothstep(30000, 140000, reynolds)
   const linear = surface.cl0 + surface.clAlpha * a + clExtra
-  const limited = clamp(linear, -surface.clMax * 1.08, surface.clMax * 1.08)
+  const clLimit = surface.clMax * (1 - .16 * lowRe)
+  const limited = clamp(linear, -clLimit, clLimit)
   // Flat plate normal force resolved into lift: 2 sin(a) cos(a), slightly reduced for finite span.
   const flat = 1.85 * Math.sin(a) * Math.cos(a)
   const cl = (1 - postStall) * limited + postStall * flat
   const induced = (limited * limited) / (Math.PI * Math.max(0.8, aspect) * surface.oswald)
-  const cdPre = surface.cd0 + induced + cdExtra
+  const cdPre = surface.cd0 * (1 + .36 * lowRe) + induced + cdExtra
   const cdPost = surface.cd0 + 1.9 * Math.sin(a) * Math.sin(a) + cdExtra * 0.5
   const cd = (1 - postStall) * cdPre + postStall * cdPost
-  return { cl, cd, postStall }
+  return { cl, cd, induced: induced * (1 - postStall), postStall }
 }
 
 /** Fuselage/boom crossflow: linear at small incidence, flat-plate normal force near 90 deg. */
@@ -58,7 +68,7 @@ const controlCommand = (surface: Surface, controls: Controls): number => {
     case 'aileron': return controls.aileron
     case 'elevator': return controls.elevator
     case 'rudder': return controls.rudder
-    case 'flap': return controls.flaps * 2 - 1
+    case 'flap': return controls.flaps
     case 'elevon': return clamp(controls.elevator + controls.aileron * surface.controlSign, -1, 1) * surface.controlSign
     default: return 0
   }
@@ -75,9 +85,13 @@ export function propellerState(spec: AircraftSpec, rpm: number, axialSpeed: numb
   let ct = ct0 * (1 - advance / zeroThrustRatio)
   if (ct < 0) ct *= 0.22 // windmilling drag
   const thrust = ct * density * revs * revs * prop.diameter ** 4
-  const cq = ct0 * (prop.kind === 'edf' ? 0.03 : 0.055)
+  const load = clamp(1 - .53 * advance / zeroThrustRatio, .22, 1.35)
+  const cq = ct0 * (prop.kind === 'edf' ? 0.03 : 0.055) * load
   const torque = cq * density * revs * revs * prop.diameter ** 5
-  const slipstream = thrust > 0 ? Math.sqrt(thrust / (2 * density * discArea)) * prop.slipstream : 0
+  const inflow = Math.max(0, axialSpeed)
+  const slipstream = thrust > 0 && density > 0
+    ? (Math.hypot(inflow, Math.sqrt(2 * thrust / (density * discArea))) - inflow) * .5 * prop.slipstream
+    : 0
   return { thrust, torque, slipstream, angularMomentum: prop.inertia * 2 * Math.PI * revs * prop.rotation, revs }
 }
 
@@ -101,6 +115,7 @@ export function aerodynamics(
   const alpha = airspeed > 0.35 ? Math.atan2(body[2], body[0]) : 0
   const beta = airspeed > 0.35 ? Math.atan2(body[1], Math.hypot(body[0], body[2])) : 0
   const rho = env.density
+  const reynoldsFactor = chordReynolds(rho, 1, 1, env.temperature)
   const prop = propellerState(spec, state.rpm, body[0], rho)
   const slipstream = prop.slipstream
 
@@ -129,14 +144,14 @@ export function aerodynamics(
     const speed = length(local)
     const qbar = 0.5 * rho * speed * speed
     if (qbar < 1e-5) { surfaces.push({ id: surface.id, alpha: 0, cl: 0, load: 0 }); continue }
-    const aspect = surface.span > 0 ? (surface.span * surface.span) / Math.max(1e-4, surface.area) : 2
+    const aspect = surface.kind === 'wing' && spec.wingArea > 0 ? spec.span ** 2 / spec.wingArea
+      : surface.span > 0 ? surface.span ** 2 / Math.max(1e-4, surface.area) : 2
     const command = controlCommand(surface, controls)
     let clExtra = surface.controlCl * surface.controlSign * command
     let cdExtra = surface.controlCd * Math.abs(command)
     let stallShift = 0
     if (surface.control === 'flap' && controls.flaps > 0) {
-      clExtra += surface.controlCl * controls.flaps
-      cdExtra += surface.controlCd * controls.flaps * controls.flaps * 2.2
+      cdExtra = surface.controlCd * controls.flaps ** 2 * 2.4
       stallShift = -0.035 * controls.flaps
     }
     if (surface.kind === 'wing' && spec.flaps?.wingLift && controls.flaps > 0) {
@@ -152,15 +167,17 @@ export function aerodynamics(
     if (surface.kind === 'wing' || surface.kind === 'htail') {
       const d = surface.dihedral
       const wEff = local[2] * Math.cos(d) + local[1] * Math.sin(d)
-      localAlpha = Math.atan2(wEff, local[0]) + surface.incidence
-      const polar = coefficients(localAlpha, surface, aspect, clExtra, cdExtra, stallShift)
+      const flowAngle = Math.atan2(wEff, local[0])
+      localAlpha = flowAngle + surface.incidence
+      const chord = surface.kind === 'wing' ? spec.chord : surface.area / surface.span
+      const planeSpeed = Math.hypot(local[0], wEff), panelPressure = .5 * rho * planeSpeed ** 2
+      const polar = coefficients(localAlpha, surface, aspect, clExtra, cdExtra, stallShift, reynoldsFactor * planeSpeed * chord)
       cl = polar.cl
       const effect = surface.kind === 'wing' ? ge : 1
-      const inducedPart = (polar.cl * polar.cl) / (Math.PI * Math.max(0.8, aspect) * surface.oswald)
-      const cd = polar.cd - inducedPart * (1 - effect) * (1 - polar.postStall)
-      const lift = qbar * surface.area * cl * (1 + 0.06 * (1 - effect))
-      const drag = qbar * surface.area * cd
-      const sa = Math.sin(localAlpha), ca = Math.cos(localAlpha)
+      const cd = polar.cd - polar.induced * (1 - effect)
+      const lift = panelPressure * surface.area * cl * (1 + 0.06 * (1 - effect))
+      const drag = panelPressure * surface.area * cd
+      const sa = Math.sin(flowAngle), ca = Math.cos(flowAngle)
       const sd = Math.sin(d), cd2 = Math.cos(d)
       // Panel axes: chord = body x, normal = (0, sin d, cos d).
       const liftDir: Vec3 = [sa, -ca * sd, -ca * cd2]
@@ -169,16 +186,19 @@ export function aerodynamics(
       liftTotal += lift
       dragTotal += drag
       // Quarter-chord pitching moment of a cambered section.
-      moment[1] += -0.09 * surface.cl0 * qbar * surface.area * spec.chord * (surface.kind === 'wing' ? 1 : 0.25)
-      if (surface.kind === 'wing' && polar.postStall > 0.5 && speed > 2) stalled = true
+      moment[1] += -0.09 * surface.cl0 * panelPressure * surface.area * chord * (surface.kind === 'wing' ? 1 : 0.25)
+      if (surface.kind === 'wing' && polar.postStall > 0.48 && planeSpeed > 2) stalled = true
     } else if (surface.kind === 'vtail') {
-      localAlpha = Math.atan2(local[1], local[0]) + surface.incidence
-      const polar = coefficients(localAlpha, surface, aspect, clExtra, cdExtra)
+      const flowAngle = Math.atan2(local[1], local[0])
+      localAlpha = flowAngle + surface.incidence
+      const planeSpeed = Math.hypot(local[0], local[1]), panelPressure = .5 * rho * planeSpeed ** 2
+      const polar = coefficients(localAlpha, surface, aspect, clExtra, cdExtra, 0,
+        reynoldsFactor * planeSpeed * surface.area / surface.span)
       cl = polar.cl
-      const side = qbar * surface.area * cl
-      const drag = qbar * surface.area * polar.cd
-      const sb = Math.sin(localAlpha), cb = Math.cos(localAlpha)
-      componentForce = add(scale([-sb, -cb, 0], side), scale([-cb, -sb, 0], drag))
+      const side = panelPressure * surface.area * cl
+      const drag = panelPressure * surface.area * polar.cd
+      const sb = Math.sin(flowAngle), cb = Math.cos(flowAngle)
+      componentForce = add(scale([sb, -cb, 0], side), scale([-cb, -sb, 0], drag))
       dragTotal += drag
     } else {
       // Fuselage / boom: axial drag plus crossflow normal forces (knife-edge support).

@@ -9,7 +9,7 @@ import { assistProfiles } from './sim/simulation'
 import { assessLesson, beginLesson, lessons, type Lesson, type LessonRun } from './school'
 import { FlightDeck, FlightNavigation } from './FlightDeck'
 import { type NavTarget } from './avionics'
-import type { CameraMode } from './scene/FlightScene'
+import type { CameraMode, FlightFrame } from './scene/FlightScene'
 import { applyDisplayControls, cleanConfiguration, hasRetractableGear, newFlightSimulation, physicsFieldId, toDisplayFlight, type AirframeConfiguration } from './sim/bridge'
 import { EngineAudio } from './audio'
 import { ControllerSignalRow } from './ControllerSignalRow'
@@ -24,6 +24,7 @@ const FlightScene = lazy(() => import('./scene/FlightScene'))
 const AircraftHangar = lazy(() => import('./AircraftHangar'))
 const WorldPicker = lazy(() => import('./WorldPicker'))
 const zero: Controls = { throttle: 0, aileron: 0, elevator: 0, rudder: 0 }
+const flightTick = 1 / 60
 type IndexedHid = HidController & { index: number }
 
 function connectedPads(hidControllers: IndexedHid[]): Gamepad[] {
@@ -69,6 +70,8 @@ function App() {
   const [lessonHud, setLessonHud] = useState<LessonRun | null>(null)
   const [selectedLesson, setSelectedLesson] = useState<Lesson>(lessons[0])
   const flight = useRef(toDisplayFlight(simulation.current))
+  const flightFrame = useRef<FlightFrame | null>(null)
+  const flightTime = useRef(0)
   const sound = useRef<EngineAudio | null>(null)
   const [soundOn, setSoundOn] = useState(false)
   const controls = useRef<Controls>({ ...zero })
@@ -262,7 +265,7 @@ function App() {
     const currentField = world?.field ?? fields[fieldIndex]
     const listener = airfieldPilotPosition(currentField)
     const listenerHeading = currentField.runway.heading * Math.PI / 180
-    let frame = 0, last = performance.now(), accumulator = 0, display = 0
+    let frame = 0, last = performance.now(), display = 0
     const tick = (now: number) => {
       const delta = Math.min((now - last) / 1000, 0.1); last = now
       const pads = connectedPads(hidControllers.current)
@@ -353,14 +356,21 @@ function App() {
       }
       const waitingForTerrain = Boolean(world && imagery === 'loading')
       if (!paused && !showWorld && !showHangar && !changedDevice && !waitingForTerrain) {
+        const recent = flightFrame.current
+        const continuous = recent?.current === flight.current
+        let previous = continuous ? recent.previous : flight.current
+        let accumulator = continuous ? flightTime.current : 0
         accumulator += delta
-        while (accumulator >= 1 / 60) {
+        while (accumulator >= flightTick) {
+          previous = flight.current
           applyDisplayControls(simulation.current, controls.current, configuration.current)
-          simulation.current.update(1 / 60)
+          simulation.current.update(flightTick)
           flight.current = toDisplayFlight(simulation.current)
-          if (lessonRun.current) assessLesson(lessonRun.current, simulation.current, 1 / 60)
-          accumulator -= 1 / 60
+          if (lessonRun.current) assessLesson(lessonRun.current, simulation.current, flightTick)
+          accumulator -= flightTick
         }
+        flightTime.current = accumulator
+        flightFrame.current = { previous, current: flight.current, fraction: accumulator / flightTick }
       }
       sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed,
         paused || showWorld || showHangar || waitingForTerrain || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
@@ -698,7 +708,7 @@ function App() {
         <div className="flight-status">AGL {Math.round(Math.max(0, engine.state.agl))} m · Gaz %{Math.round(controls.current.throttle * 100)} · {padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
       <div className="viewport">
         <Suspense fallback={<div className="scene-loading" role="status">Uçuş alanı yükleniyor…</div>}>
-          <FlightScene key={world?.key ?? 'practice'} state={flight} controls={controls} field={field} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle}
+          <FlightScene key={world?.key ?? 'practice'} state={flight} flightFrame={flightFrame} controls={controls} field={field} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle}
             world={world?.terrain} onImagery={setImagery} peers={peers.filter(pilot => pilot.field === fieldIndex)} />
         </Suspense>
         <div className="scene-label"><strong>{field.name}</strong><span>{coordinates

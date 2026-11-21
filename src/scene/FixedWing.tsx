@@ -4,7 +4,9 @@ import * as THREE from 'three'
 import type { Controls, FlightState } from '../flight'
 import type { AircraftSpec } from '../sim/types'
 
-import { cabinGeometry, empennageGeometry, floatHullGeometry, fuselageGeometry, wingPieces } from './aircraftGeometry'
+import { cabinGeometry, empennageGeometry, floatHullGeometry, fuselageGeometry, wingPieces, wingtipRise } from './aircraftGeometry'
+import { ScaleCockpit } from './ScaleCockpit'
+import { addFuselageFinish, addWingFinish } from './airframeFinish'
 
 function Brace({ from, to, width = .005 }: { from: [number, number, number]; to: [number, number, number]; width?: number }) {
   const start = new THREE.Vector3(...from), end = new THREE.Vector3(...to)
@@ -38,7 +40,8 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
   }, [tailMeshes])
   const wing = useMemo(() => wingPieces(spec), [spec])
   const fuselage = useMemo(() => fuselageGeometry(spec), [spec])
-  const canopy = useMemo(() => cabinGeometry(spec), [spec])
+  const detailedCockpit = spec.prop.kind === 'edf' || spec.id === 'warbird1400' || spec.id === 'extra330'
+  const canopy = useMemo(() => cabinGeometry(spec, detailedCockpit), [spec, detailedCockpit])
   const floatHull = useMemo(() => visual.floats
     ? floatHullGeometry(visual.fuselageLength * .74, visual.fuselageRadius * .59, visual.color, visual.accent)
     : null, [visual])
@@ -103,7 +106,7 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
   const bladeCount = visual.propBlades
   return <group>
     <mesh geometry={fuselage} castShadow>
-      <meshPhysicalMaterial vertexColors roughness={.33} clearcoat={.42} clearcoatRoughness={.27} />
+      <meshPhysicalMaterial vertexColors roughness={.33} clearcoat={.42} clearcoatRoughness={.27} onBeforeCompile={addFuselageFinish} />
     </mesh>
     {prop.kind === 'edf' && <>
       {[-1, 1].map(side => <group key={side} position={[side * radius * .89, -radius * .16, nose - length * .35]} rotation={[0, side * .19, 0]}>
@@ -130,7 +133,14 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
         </group>
       </group>
     </>}
-    {visual.canopy !== 'none' && <mesh geometry={canopy}>
+    {detailedCockpit ? <>
+      <ScaleCockpit spec={spec} />
+      <mesh geometry={canopy}>
+        <meshPhysicalMaterial attach="material-0" color={visual.trim} roughness={.44} clearcoat={.34} />
+        <meshPhysicalMaterial attach="material-1" color="#6f99ac" opacity={.49} transparent depthWrite={false}
+          metalness={.16} roughness={.15} clearcoat={.85} clearcoatRoughness={.19} />
+      </mesh>
+    </> : visual.canopy !== 'none' && <mesh geometry={canopy}>
       <meshPhysicalMaterial vertexColors metalness={.23} roughness={.22} clearcoat={.85} />
     </mesh>}
     {visual.canopy === 'greenhouse' && [-1, 1].map(side => <mesh key={side}
@@ -158,10 +168,10 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
         else flaps.current[index] = node
       } : undefined}>
         <mesh geometry={geometry} castShadow>
-          <meshPhysicalMaterial vertexColors roughness={.37} clearcoat={.28} side={THREE.DoubleSide} />
+          <meshPhysicalMaterial vertexColors roughness={.37} clearcoat={.28} side={THREE.DoubleSide} onBeforeCompile={addWingFinish} />
         </mesh>
       </group>)}
-      <mesh position={[spec.span * .493, spec.span * .486 * dihedral + .002, -spec.span * .49 * sweep - .022]}>
+      <mesh position={[spec.span * .493, spec.span * .486 * dihedral + wingtipRise(spec) * .9 + .002, -spec.span * .49 * sweep - .035]}>
         <sphereGeometry args={[Math.max(.004, spec.chord * .023), 12, 8]} />
         <meshStandardMaterial color={side < 0 ? '#eb3639' : '#39c879'} emissive={side < 0 ? '#9a1f25' : '#20734a'} roughness={.28} />
       </mesh>
@@ -204,10 +214,11 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
           {gear.retractChannel >= 0 && <mesh position={[0, -down * .6, -.008]} rotation={[0, 0, .04]}>
             <boxGeometry args={[gear.radius * .72, down * .56, .005]} /><meshPhysicalMaterial color={visual.color} roughness={.42} clearcoat={.2} />
           </mesh>}
-          <mesh position={[0, -down, 0]} rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[gear.radius, gear.radius, gear.radius * .48, 16]} />
-            <meshStandardMaterial color="#252927" roughness={.8} /></mesh>
+          <mesh position={[0, -down, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
+            <torusGeometry args={[gear.radius * .743, gear.radius * .257, 12, 32]} /><meshStandardMaterial color="#252927" roughness={.83} />
+          </mesh>
           {[-1, 1].map(side => <mesh key={side} position={[side * gear.radius * .245, -down, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[gear.radius * .54, gear.radius * .54, gear.radius * .1, 18]} />
+            <cylinderGeometry args={[gear.radius * .53, gear.radius * .56, gear.radius * .13, 24]} />
             <meshStandardMaterial color="#9da7a9" metalness={.62} roughness={.39} />
           </mesh>)}
         </group>

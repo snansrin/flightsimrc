@@ -15,9 +15,10 @@ const noses: Record<string, Frame[]> = {
   float1200: [[0,.12,.19,.32],[.14,.28,.33,.24],[.35,.48,.52,.11],[.52,.8,.8,.02],[.66,1.03,1.06,0],[.8,1.01,1.03,.03],[.96,.76,.78,.03],[1,.53,.55,.03]],
 }
 
-function meshData(points: number[], indices: number[], colors?: number[]) {
+function meshData(points: number[], indices: number[], colors: number[] | undefined, uv: number[]) {
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
   if (colors) geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
@@ -26,7 +27,7 @@ function meshData(points: number[], indices: number[], colors?: number[]) {
 
 function loft(profile: Frame[], length: number, radius: number, tip: number, colorAt?: (station: number, side: number, height: number) => THREE.Color, sectionalPower = 1) {
   const radial = 48, rows = 96, stride = radial + 1
-  const points: number[] = [], colors: number[] = [], indices: number[] = []
+  const points: number[] = [], colors: number[] = [], indices: number[] = [], uv: number[] = []
   const stations = profile.map(row => row[0])
   const sections = new THREE.CatmullRomCurve3(profile.map(([, x, y, center]) => new THREE.Vector3(x, y, center)), false, 'catmullrom')
   for (let row = 0; row <= rows; row++) {
@@ -39,6 +40,7 @@ function loft(profile: Frame[], length: number, radius: number, tip: number, col
       const x = Math.sign(horizontal) * Math.abs(horizontal) ** sectionalPower
       const y = Math.sign(vertical) * Math.abs(vertical) ** sectionalPower
       points.push(radius * shape.x * x, radius * (shape.z + shape.y * y), tip + length * (station - 1))
+      uv.push(station, side / radial)
       colorAt?.(station, horizontal, vertical).toArray(colors, colors.length)
       if (!row || !side) continue
       const at = row * stride + side
@@ -47,25 +49,26 @@ function loft(profile: Frame[], length: number, radius: number, tip: number, col
   }
   // Close the nose and rear cut planes. EDF's exhaust is a separate assembly.
   for (let side = 1; side < radial; side++) indices.push(0, side + 1, side, rows * stride, rows * stride + side, rows * stride + side + 1)
-  return meshData(points, indices, colorAt ? colors : undefined)
+  return meshData(points, indices, colorAt ? colors : undefined, uv)
 }
 
 export function fuselageGeometry(spec: AircraftSpec) {
   const { visual } = spec
   const paint = new THREE.Color(visual.color), stripe = new THREE.Color(visual.accent), trim = new THREE.Color(visual.trim)
-  const belly = paint.clone().lerp(trim, .19), seam = paint.clone().lerp(trim, .30)
+  const belly = paint.clone().lerp(trim, .19), seam = paint.clone().lerp(trim, .30), livery = new THREE.Color()
   const profile = noses[spec.id] ?? noses.trainer1500
   return loft(profile, visual.fuselageLength, visual.fuselageRadius, visual.noseLength, (s, side, height) => {
     if (spec.prop.kind === 'edf' && s > .94) return trim
     if (spec.prop.kind === 'prop' && s > .885 && s < .898) return seam
-    if (Math.abs(side) > .64 && Math.abs(height - (s * .60 - .28)) < (spec.prop.kind === 'edf' ? .23 : .14)) return stripe
     if (spec.id === 'warbird1400' && s > .89) return stripe
     if (height < -.82 && s > .19 && s < .88) return belly
-    return paint
+    const stripeWidth = spec.prop.kind === 'edf' ? .23 : .14
+    const band = 1 - THREE.MathUtils.smoothstep(Math.abs(height - (s * .60 - .28)), stripeWidth - .065, stripeWidth + .028)
+    return livery.copy(paint).lerp(stripe, band * THREE.MathUtils.smoothstep(Math.abs(side), .55, .74))
   }, visual.canopy === 'greenhouse' ? .83 : 1)
 }
 
-export function cabinGeometry(spec: AircraftSpec) {
+export function cabinGeometry(spec: AircraftSpec, glazing = false) {
   const radius = spec.visual.fuselageRadius
   const length = spec.visual.fuselageLength
   const jet = spec.prop.kind === 'edf'
@@ -76,11 +79,27 @@ export function cabinGeometry(spec: AircraftSpec) {
       ? [[0,.20,.03,.62],[.12,.78,.27,.84],[.26,.96,.34,.96],[.57,.94,.35,.97],[.76,.86,.34,.93],[.94,.63,.20,.77],[1,.04,.028,.70]]
       : [[0,.055,.05,.7],[.18,.69,.39,.79],[.41,.8,.48,.84],[.63,.78,.46,.83],[.83,.56,.33,.76],[1,.03,.035,.55]]
   const glint = new THREE.Color(jet ? '#3d728a' : '#4a7282'), shadow = new THREE.Color('#182830'), frame = new THREE.Color(spec.visual.trim)
-  return loft(frames, length * (jet ? .29 : greenhouse ? .31 : .255), radius, spec.visual.noseLength - length * (jet ? .21 : .162), (station, side, height) => {
+  const geometry = loft(frames, length * (jet ? .29 : greenhouse ? .31 : .255), radius, spec.visual.noseLength - length * (jet ? .21 : .162), (station, side, height) => {
     if (station < .095 || station > .91 || station > .54 && station < .583 || height < -.55) return frame
     if (greenhouse && (Math.abs(side) < .33 || station > .29 && station < .33)) return frame
     return shadow.clone().lerp(glint, Math.min(1, (height + .5) * .68))
   }, greenhouse ? .62 : 1)
+  if (!glazing) return geometry
+  const labels = geometry.getAttribute('uv')
+  const backing: number[] = [], glass: number[] = []
+  const index = geometry.getIndex()!
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2)
+    const station = (labels.getX(a) + labels.getX(b) + labels.getX(c)) / 3
+    const height = Math.sin((labels.getY(a) + labels.getY(b) + labels.getY(c)) * Math.PI * 2 / 3)
+    const frame = station < .095 || station > .91 || (station > .54 && station < .58) || height < -.16
+    const target = frame ? backing : glass
+    target.push(a, b, c)
+  }
+  geometry.setIndex(backing.concat(glass))
+  geometry.addGroup(0, backing.length, 0)
+  geometry.addGroup(backing.length, glass.length, 1)
+  return geometry
 }
 
 export function floatHullGeometry(length: number, radius: number, paint: string, trim: string) {
@@ -90,6 +109,8 @@ export function floatHullGeometry(length: number, radius: number, paint: string,
   return loft(hull, length, radius, length * .53, (_, _side, height) => height > -.34 ? upper : keel, .72)
 }
 
+export const wingtipRise = (spec: AircraftSpec) => spec.id === 'glider2000' ? .065 : spec.id === 'edf90' ? .029 : .012
+
 export function wingPieces(spec: AircraftSpec): Piece[] {
   const span = spec.span / 2, { visual } = spec
   const sweep = Math.tan(THREE.MathUtils.degToRad(visual.sweep))
@@ -97,23 +118,29 @@ export function wingPieces(spec: AircraftSpec): Piece[] {
   const chord = spec.chord * 2 / (1 + visual.taper)
   const base = new THREE.Color(visual.color), accent = new THREE.Color(visual.accent), trim = new THREE.Color(visual.trim)
   const pigment = new THREE.Color()
+  const tipRadius = spec.id === 'warbird1400' ? .66 : spec.id === 'glider2000' ? .54 : spec.id === 'extra330' ? .31 : .45
+  const tipRise = wingtipRise(spec)
+  const tipStart = spec.id === 'warbird1400' ? .83 : .91
   const wing = (fraction: number, section: number, top: number) => {
-    const c = chord * THREE.MathUtils.lerp(1, visual.taper, fraction) * (1 - .48 * THREE.MathUtils.smoothstep(fraction, .93, 1))
+    const tip = THREE.MathUtils.smoothstep(fraction, tipStart, 1)
+    const c = chord * THREE.MathUtils.lerp(1, visual.taper, fraction) * (1 - tipRadius * tip)
     const thickness = .6 * (.2969 * Math.sqrt(section) - .126 * section - .3516 * section ** 2 + .2843 * section ** 3 - .1036 * section ** 4)
     const camber = (spec.id === 'extra330' ? 0 : .023) * Math.sin(section * Math.PI)
-    return new THREE.Vector3(span * fraction, span * fraction * dihedral + c * (thickness * top + camber), (.25 - section) * c - span * fraction * sweep)
+    return new THREE.Vector3(span * fraction, span * fraction * dihedral + c * (thickness * top + camber) + tip * tipRise,
+      (.25 - section) * c - span * fraction * sweep - tip * chord * .072)
   }
   const make = (start: number, end: number, front: number, rear: number, control?: Piece['control']): Piece => {
     const rows = Math.max(3, Math.ceil((end - start) * 52)), columns = 40, stride = columns + 1
-    const points: number[] = [], colors: number[] = [], indices: number[] = []
+    const points: number[] = [], colors: number[] = [], indices: number[] = [], uv: number[] = []
     const pivot = control ? wing((start + end) / 2, front, 0) : new THREE.Vector3()
     for (let row = 0; row <= rows; row++) {
       const s = THREE.MathUtils.lerp(start, end, row / rows)
       for (let col = 0; col <= columns; col++) {
-        const angle = col / columns * Math.PI * 2, top = Math.sin(angle)
+        const angle = col / columns * Math.PI * 2, top = col <= columns / 2 ? 1 : -1
         const section = THREE.MathUtils.lerp(front, rear, (1 - Math.cos(angle)) / 2)
-        const point = wing(s, section, Math.sign(top)).sub(pivot)
+        const point = wing(s, section, top).sub(pivot)
         point.toArray(points, points.length)
+        uv.push(s, section)
         const pattern = s + .13 * section
         const stripe = THREE.MathUtils.smoothstep(pattern, .66, .695) * (1 - THREE.MathUtils.smoothstep(pattern, .805, .84))
         const tip = THREE.MathUtils.smoothstep(s, .925, .97)
@@ -126,9 +153,13 @@ export function wingPieces(spec: AircraftSpec): Piece[] {
         const i = row * stride + col
         indices.push(i, i - stride, i - stride - 1, i, i - stride - 1, i - 1)
       }
+      if (row && front > 0) {
+        const i = row * stride, end = i + columns
+        indices.push(i, i - stride, end - stride, i, end - stride, end)
+      }
     }
     for (let col = 1; col < columns; col++) indices.push(0, col + 1, col, rows * stride, rows * stride + col, rows * stride + col + 1)
-    return { geometry: meshData(points, indices, colors), pivot, control }
+    return { geometry: meshData(points, indices, colors, uv), pivot, control }
   }
   return [
     make(0, .17, 0, 1),

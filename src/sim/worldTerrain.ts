@@ -202,6 +202,18 @@ export class WorldTerrain {
     return this.heightAtMercator(point.x, point.y)
   }
 
+  elevationNeighbors(tile: Tile) {
+    const level = parentTile(tile, Math.min(tile.z, elevationZoom))
+    let available = 0
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = wrapped(level.x + dx, 2 ** level.z), y = level.y + dy
+        if (this.elevations.has(tileKey({ z: level.z, x, y }))) available |= 1 << ((dy + 1) * 3 + dx + 1)
+      }
+    }
+    return available
+  }
+
   preload(tile: Tile): Promise<void> {
     const level = parentTile(tile, Math.min(tile.z, elevationZoom))
     level.x = wrapped(level.x, 2 ** level.z)

@@ -17,8 +17,8 @@ function withinRing(x: number, y: number, ring: Point[]) {
   return inside
 }
 
-export function treesInTile(layer: VectorTileLayer | undefined, toLocal: (x: number, y: number, extent: number) => [number, number],
-  height: (x: number, south: number) => number, bound: number, blocked?: (x: number, south: number) => boolean): TerrainTree[] {
+export function* treesInTile(layer: VectorTileLayer | undefined, toLocal: (x: number, y: number, extent: number) => [number, number],
+  height: (x: number, south: number) => number, bound: number, blocked?: (x: number, south: number) => boolean): Generator<void, TerrainTree[]> {
   if (!layer) return []
   const plants: TerrainTree[] = []
   const spacing = 32
@@ -39,6 +39,7 @@ export function treesInTile(layer: VectorTileLayer | undefined, toLocal: (x: num
       const minX = Math.max(-bound, west, extent.min.x), maxX = Math.min(bound, east, extent.max.x)
       const minY = Math.max(-bound, north, extent.min.y), maxY = Math.min(bound, south, extent.max.y)
       for (let column = Math.ceil(minX / spacing); column * spacing < maxX && candidates < 6800 && plants.length < 380; column++) {
+        yield
         for (let row = Math.ceil(minY / spacing); row * spacing < maxY && candidates < 6800 && plants.length < 380; row++) {
           candidates++
           const shade = variation(column, row)
