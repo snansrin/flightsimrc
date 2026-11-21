@@ -2,43 +2,39 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { FlightState } from '../flight'
-import { satelliteUrl, terrainTiles, tileKey, type Tile, type WorldTerrain } from '../sim/worldTerrain'
+import { coarseEdgeHeight, coarserNeighbor, terrainSubdivisions, terrainTiles, tileKey, type Tile, type WorldTerrain } from '../sim/worldTerrain'
 import { WorldBuildings } from './WorldBuildings'
 
 type TileAsset = { tile: Tile; map: THREE.Texture | null }
 const interval = .55
 
-function tileTexture(tile: Tile): Promise<THREE.Texture | null> {
-  return new Promise(resolve => {
-    const image = new Image()
-    image.crossOrigin = 'anonymous'
-    const timer = window.setTimeout(() => finish(null), 11000)
-    function finish(map: THREE.Texture | null) {
-      window.clearTimeout(timer)
-      image.onload = image.onerror = null
-      resolve(map)
-    }
-    image.onload = () => {
-      const map = new THREE.Texture(image)
-      map.colorSpace = THREE.SRGBColorSpace
-      map.anisotropy = 8
-      map.needsUpdate = true
-      finish(map)
-    }
-    image.onerror = () => finish(null)
-    image.src = satelliteUrl(tile)
-  })
+async function tileTexture(world: WorldTerrain, tile: Tile) {
+  const image = await world.satellite(tile)
+  if (!image) return null
+  const map = new THREE.Texture(image)
+  map.colorSpace = THREE.SRGBColorSpace
+  map.anisotropy = 8
+  map.needsUpdate = true
+  return map
 }
 
-function terrainGeometry(world: WorldTerrain, tile: Tile) {
-  const subdivisions = tile.z === 14 ? 72 : tile.z === 13 ? 46 : 24
+function terrainGeometry(world: WorldTerrain, tile: Tile, visible: ReadonlySet<string>) {
+  const subdivisions = terrainSubdivisions(tile.z)
   const points: number[] = [], uv: number[] = [], index: number[] = []
   const n = 2 ** tile.z, stride = subdivisions + 1
+  const top = coarserNeighbor(tile, 0, -1, visible), bottom = coarserNeighbor(tile, 0, 1, visible)
+  const left = coarserNeighbor(tile, -1, 0, visible), right = coarserNeighbor(tile, 1, 0, visible)
   for (let row = 0; row <= subdivisions; row++) {
     for (let col = 0; col <= subdivisions; col++) {
       const u = col / subdivisions, v = row / subdivisions
-      const [x, south] = world.toLocal((tile.x + u) / n, (tile.y + v) / n)
-      points.push(x, world.height(x, south, tile.z), -south)
+      const mx = (tile.x + u) / n, my = (tile.y + v) / n
+      const [x, south] = world.toLocal(mx, my)
+      const horizontal = row === 0 ? top : row === subdivisions ? bottom : undefined
+      const vertical = col === 0 ? left : col === subdivisions ? right : undefined
+      let height = world.heightAtMercator(mx, my, tile.z)
+      if (horizontal && (!vertical || horizontal.z <= vertical.z)) height = coarseEdgeHeight(horizontal, true, mx, my, world.heightAtMercator)
+      else if (vertical) height = coarseEdgeHeight(vertical, false, mx, my, world.heightAtMercator)
+      points.push(x, height, -south)
       uv.push(u, 1 - v)
       if (!row || !col) continue
       const p = row * stride + col
@@ -57,9 +53,13 @@ function terrainGeometry(world: WorldTerrain, tile: Tile) {
   for (const edge of edges) {
     const offset = points.length / 3
     edge.forEach((vertex, i) => {
-      points.push(points[vertex * 3], points[vertex * 3 + 1] - skirt, points[vertex * 3 + 2])
-      uv.push(uv[vertex * 2], uv[vertex * 2 + 1])
-      if (i) index.push(edge[i - 1], offset + i - 1, offset + i, edge[i - 1], offset + i, vertex)
+      const [x, y, z] = [points[vertex * 3], points[vertex * 3 + 1], points[vertex * 3 + 2]]
+      const u = uv[vertex * 2], v = uv[vertex * 2 + 1]
+      // Split skirt vertices so the vertical skirt does not tilt the normals on the ground.
+      points.push(x, y, z, x, y - skirt, z)
+      uv.push(u, v, u, v)
+      const at = offset + 2 * i
+      if (i) index.push(at - 2, at - 1, at + 1, at - 2, at + 1, at)
     })
   }
   const geometry = new THREE.BufferGeometry()
@@ -101,11 +101,12 @@ function EarthSky() {
   </mesh>
 }
 
-function GroundTile({ world, asset, revision }: { world: WorldTerrain; asset: TileAsset; revision: number }) {
-  const geometry = useMemo(() => terrainGeometry(world, asset.tile), [world, asset, revision])
+function GroundTile({ world, asset, visible }: { world: WorldTerrain; asset: TileAsset; visible: ReadonlySet<string> }) {
+  const geometry = useMemo(() => terrainGeometry(world, asset.tile, visible), [world, asset, visible])
   useEffect(() => () => geometry.dispose(), [geometry])
   return <mesh geometry={geometry}>
-    <meshLambertMaterial map={asset.map} color={asset.map ? '#eaf0e6' : '#6d776c'} side={THREE.DoubleSide} />
+    <meshLambertMaterial map={asset.map} color={asset.map ? '#eaf0e6' : '#6d776c'}
+      emissiveMap={asset.map} emissive={asset.map ? '#ffffff' : '#000000'} emissiveIntensity={.28} side={THREE.DoubleSide} />
   </mesh>
 }
 
@@ -114,7 +115,7 @@ export function EarthTerrain({ world, flight, onImagery }: {
 }) {
   const [patch, setPatch] = useState(() => terrainTiles(world.origin.x, world.origin.y))
   const [assets, setAssets] = useState<TileAsset[]>([])
-  const [revision, setRevision] = useState(0)
+  const visible = useMemo(() => new Set(assets.map(({ tile }) => tileKey(tile))), [assets])
   const cache = useRef(new Map<string, TileAsset>())
   const requests = useRef(new Map<string, Promise<TileAsset | null>>())
   const alive = useRef(true)
@@ -149,7 +150,7 @@ export function EarthTerrain({ world, flight, onImagery }: {
       if (ready) return Promise.resolve(ready)
       const pending = requests.current.get(key)
       if (pending) return pending
-      const request = Promise.all([world.preload(tile).then(() => true, () => false), tileTexture(tile)])
+      const request = Promise.all([world.preload(tile).then(() => true, () => false), tileTexture(world, tile)])
         .then(([hasElevation, map]) => {
           if (!alive.current || !hasElevation) { map?.dispose(); return null }
           const asset = { tile, map }
@@ -164,12 +165,16 @@ export function EarthTerrain({ world, flight, onImagery }: {
         const asset = cache.current.get(tileKey(tile))
         return asset ? [asset] : []
       })
-      setAssets((previous) => next.length ? next : previous)
-      setRevision(value => value + 1)
-      if (next.some(asset => asset.map)) onImagery('ready')
+      setAssets(previous => !next.length || (next.length === previous.length && next.every((asset, index) => asset === previous[index]))
+        ? previous : next)
     }
     async function stream() {
-      if (!filled.current) publish()
+      if (!filled.current) {
+        const starter = await load(world.startTile)
+        if (!active) return
+        publish()
+        onImagery(starter?.map ? 'ready' : 'unavailable')
+      }
       const missing = patch.filter(tile => !cache.current.has(tileKey(tile)))
       for (let i = 0; i < missing.length && active; i += 7) {
         await Promise.all(missing.slice(i, i + 7).map(load))
@@ -178,7 +183,7 @@ export function EarthTerrain({ world, flight, onImagery }: {
       if (!active) return
       publish()
       filled.current = true
-      if (!patch.some(tile => cache.current.get(tileKey(tile))?.map)) onImagery('unavailable')
+      onImagery(patch.some(tile => cache.current.get(tileKey(tile))?.map) ? 'ready' : 'unavailable')
       for (const [key, asset] of cache.current) {
         if (cache.current.size <= 112) break
         if (required.has(key)) continue
@@ -196,7 +201,7 @@ export function EarthTerrain({ world, flight, onImagery }: {
     <EarthSky />
     <hemisphereLight args={['#eff8ff', '#8a9287', 2.05]} />
     <directionalLight position={[-24, 45, -30]} intensity={1.25} />
-    {assets.map(asset => <GroundTile key={tileKey(asset.tile)} world={world} asset={asset} revision={revision} />)}
+    {assets.map(asset => <GroundTile key={tileKey(asset.tile)} world={world} asset={asset} visible={visible} />)}
     {assets.filter(asset => asset.tile.z === 14).slice(0, 4).map(({ tile }) =>
       <WorldBuildings key={tileKey(tile)} world={world} tile={tile} />)}
   </>

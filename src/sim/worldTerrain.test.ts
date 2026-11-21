@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { localWaypoint } from '../avionics'
 import { Simulation } from './simulation'
-import { geographic, mercator, parentTile, satelliteUrl, terrainTiles, terrariumHeight, tileKey, WorldTerrain } from './worldTerrain'
+import { coarseEdgeHeight, coarserNeighbor, geographic, mercator, parentTile, satelliteUrl, terrainSubdivisions, terrainTiles, terrariumHeight, tileKey, WorldTerrain } from './worldTerrain'
 
 describe('world terrain coordinates and level of detail', () => {
   it('round-trips local metres and crosses the international date line', () => {
@@ -33,14 +33,29 @@ describe('world terrain coordinates and level of detail', () => {
     expect(terrariumHeight(128, 0, 0)).toBe(0)
     expect(terrariumHeight(127, 255, 128)).toBe(-.5)
     const world = new WorldTerrain({ latitude: 45, longitude: 7 })
-    const field = { ...world.field(), datumAltitude: 2000, height: (x: number) => 24 + x * .01 }
+    const field = { ...world.field(90), datumAltitude: 2000, height: (x: number) => 24 + x * .01 }
     const simulation = new Simulation()
-    const airborne = { altitude: 150, airspeed: 20, offset: 0 }
+    const airborne = { altitude: 350, airspeed: 20, offset: 0 }
     simulation.reset({ field, airborne })
     expect(simulation.field).toBe(field)
-    expect(simulation.state.position).toEqual([0, 174, 0])
+    expect(simulation.state.position).toEqual([0, 374, 0])
+    expect(simulation.attitude.yaw).toBeCloseTo(Math.PI / 2)
     expect(localWaypoint(field, 'runway')).toEqual({ x: 0, z: -0, label: 'BAŞLANGIÇ NOKTASI' })
     simulation.reset({ field: 'anadolu' })
     expect(simulation.field.id).toBe('anadolu')
+  })
+
+  it('aligns the fine boundary with the triangle edge of the coarser tile to its north', () => {
+    const fine = { z: 14, x: 8000, y: 4000 }
+    const coarse = { z: 13, x: 4000, y: 1999 }
+    const tiles = new Set([tileKey(fine), tileKey(coarse)])
+    expect(coarserNeighbor(fine, 0, -1, tiles)).toEqual(coarse)
+    expect(coarserNeighbor(fine, -1, 0, tiles)).toBeUndefined()
+    const n = 2 ** coarse.z, subdivisions = terrainSubdivisions(coarse.z)
+    const y = fine.y / 2 ** fine.z
+    const start = coarse.x / n, step = 1 / (n * subdivisions)
+    const sample = (x: number) => ((x - start) / step) ** 2 * 12
+    expect(coarseEdgeHeight(coarse, true, start + step / 2, y, sample)).toBeCloseTo(6)
+    expect(coarseEdgeHeight(coarse, true, start + step, y, sample)).toBeCloseTo(12)
   })
 })

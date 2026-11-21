@@ -390,6 +390,22 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
 .earth-toolbar h2, .earth-toolbar p { margin: 0; }
 .earth-toolbar p { color: #a8bec4; font-size: .87rem; margin-top: 5px; }
 .earth-globe { height: clamp(210px, 53dvh, 560px); background: #182f45; }
+.earth-heading-marker {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #ffe4bd;
+  border-radius: 50%;
+  background: #1b3344;
+  box-shadow: 0 2px 8px #09151dbb;
+  pointer-events: none;
+}
+.earth-heading-marker::after {
+  content: "";
+  position: absolute;
+  inset: 4px 5px 5px;
+  clip-path: polygon(50% 0, 100% 100%, 50% 73%, 0 100%);
+  background: #ffbd65;
+}
 .earth-picker button, .earth-picker input { padding: 7px 11px; border-radius: 5px; color: #edf6f3; background: #203b46; border: 1px solid #597381; }
 .earth-picker .maplibregl-ctrl button { padding: 0; border: none; background: #fff; }
 .earth-form form, .earth-presets { display: flex; flex-wrap: wrap; align-items: end; gap: 7px; margin-bottom: 8px; }

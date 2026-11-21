@@ -16,7 +16,7 @@ import { ControllerSignalRow } from './ControllerSignalRow'
 import { choosePreferredPad } from './controllerSelection'
 import { prepareQuickFlight } from './quickFlight'
 import { findGuidedAxis, guidedRange, type GuidedStep } from './guidedSetup'
-import { satelliteCredit, WorldTerrain, type WorldPoint } from './sim/worldTerrain'
+import { satelliteCredit, WorldTerrain, type WorldStart } from './sim/worldTerrain'
 import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
 import './style.css'
 
@@ -82,7 +82,7 @@ function App() {
   const keys = useRef(new Set<string>())
   const [hud, setHud] = useState(toDisplayFlight(simulation.current))
   const [fieldIndex, setFieldIndex] = useState(0)
-  const [world, setWorld] = useState<{ terrain: WorldTerrain; field: ReturnType<WorldTerrain['field']>; key: number }>()
+  const [world, setWorld] = useState<{ start: WorldStart; terrain: WorldTerrain; field: ReturnType<WorldTerrain['field']>; key: number }>()
   const [showWorld, setShowWorld] = useState(() => new URLSearchParams(location.search).get('world') === '1')
   const [imagery, setImagery] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const worldSelection = useRef(0)
@@ -347,7 +347,8 @@ function App() {
         const response = 1 - Math.exp(-delta * 7)
         controls.current = { throttle: Math.max(0, Math.min(1, controls.current.throttle + ((k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0)) * delta * .45)), aileron: controls.current.aileron + (target.aileron - controls.current.aileron) * response, elevator: controls.current.elevator + (target.elevator - controls.current.elevator) * response, rudder: controls.current.rudder + (target.rudder - controls.current.rudder) * response }
       }
-      if (!paused && !showWorld && !changedDevice) {
+      const waitingForTerrain = Boolean(world && imagery === 'loading')
+      if (!paused && !showWorld && !changedDevice && !waitingForTerrain) {
         accumulator += delta
         while (accumulator >= 1 / 60) {
           applyDisplayControls(simulation.current, controls.current, configuration.current)
@@ -358,13 +359,13 @@ function App() {
         }
       }
       sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed,
-        paused || showWorld || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
+        paused || showWorld || waitingForTerrain || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
         activeCamera.current === 'pilot' ? listener : undefined)
       if (now - display > 100) { setHud({ ...flight.current }); if (lessonRun.current) setLessonHud({ ...lessonRun.current }); setPadAxes(pad ? [...pad.axes] : []); setAxisTravel(travel.current.axes.map(range => range && { ...range })); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame)
-  }, [calibration, controllerArmed, fieldIndex, mapping, selectedPadIndex, tuning, paused, setup, vehicle, world, showWorld])
+  }, [calibration, controllerArmed, fieldIndex, imagery, mapping, selectedPadIndex, tuning, paused, setup, vehicle, world, showWorld])
   const clearLesson = () => {
     lessonRun.current = null
     setLessonHud(null)
@@ -374,7 +375,7 @@ function App() {
     engine.reset({
       aircraft: model.id,
       field: nextWorld?.field ?? physicsFieldId(nextField),
-      airborne: nextWorld ? { altitude: 150, airspeed: model.family === 'fixed' ? model.envelope.cruise : 0, offset: 0 }
+      airborne: nextWorld ? { altitude: nextWorld.start.altitude, airspeed: model.family === 'fixed' ? model.envelope.cruise : 0, offset: 0 }
         : lesson && 'airborne' in lesson ? lesson.airborne : undefined,
     })
     if (assistMode !== 'model') engine.assists = { ...engine.spec.assists, ...assistProfiles[Number(assistMode)] }
@@ -390,15 +391,15 @@ function App() {
     } else clearLesson()
   }
   const closeWorld = () => { worldSelection.current++; setShowWorld(false); keys.current.clear() }
-  const launchWorld = async (point: WorldPoint) => {
+  const launchWorld = async (start: WorldStart) => {
     const key = ++worldSelection.current
-    const terrain = new WorldTerrain(point)
+    const terrain = new WorldTerrain(start)
     await terrain.prepare()
     if (key !== worldSelection.current) return
-    const next = { terrain, field: terrain.field(), key }
+    const next = { start, terrain, field: terrain.field(start.heading), key }
     setWorld(next)
     setImagery('loading')
-    setCourse(0)
+    setCourse(start.heading)
     setNavTarget('runway')
     setCameraMode('chase')
     reset(vehicle, fieldIndex, undefined, next)
@@ -697,7 +698,7 @@ function App() {
           ? [coordinates.latitude.toFixed(5), coordinates.longitude.toFixed(5)].join(', ')
           : field.weather.windSpeed.toFixed(1) + ' m/s · ' + field.weather.windDirection + '° · ' + field.runway.length + ' m pist'}</span></div>
         {world && imagery !== 'ready' && <span className="earth-status" role="status">{imagery === 'loading'
-          ? 'Uydu karoları yükleniyor…' : 'Uydu görüntüsü şu anda erişilemiyor.'}</span>}
+          ? 'Başlangıç arazisi yükleniyor…' : 'Başlangıç noktasında uydu görüntüsü yok.'}</span>}
         {cameraMode === 'onboard' && <div className="crosshair" aria-hidden="true">+</div>}
         {hud.crashed && <div className="crash"><strong>Uçuş sona erdi</strong><span>{engine.state.crashReason || 'Araç kaza yaptı.'}</span><button onClick={retry}>Yeniden başla</button></div>}
         {hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}
@@ -765,7 +766,7 @@ function App() {
           target={navTarget} onTargetChange={setNavTarget} />}
       </div>
       {showWorld && <Suspense fallback={<div className="earth-picker" role="status">Dünya haritası açılıyor…</div>}>
-        <WorldPicker initial={world?.terrain.point} onClose={closeWorld} onLaunch={launchWorld} />
+        <WorldPicker initial={world?.start} onClose={closeWorld} onLaunch={launchWorld} />
       </Suspense>}
     </section>
     <section className="academy" aria-labelledby="school-title">

@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Map, Marker, NavigationControl, setWorkerUrl, type StyleSpecification } from 'maplibre-gl'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { mercatorLatitude, satelliteCredit, satelliteTemplate, type WorldPoint } from './sim/worldTerrain'
+import { mercatorLatitude, satelliteCredit, satelliteTemplate, worldAltitude, type WorldPoint, type WorldStart } from './sim/worldTerrain'
 
 setWorkerUrl(workerUrl)
 
 const sites = [
-  { label: 'Ankara', latitude: 39.9552, longitude: 32.8117 },
-  { label: 'İstanbul', latitude: 41.0231, longitude: 29.0122 },
-  { label: 'Alpler', latitude: 46.6786, longitude: 7.8854 },
-  { label: 'Colorado', latitude: 39.5323, longitude: -105.0604 },
+  { label: 'Ankara', latitude: 39.9552, longitude: 32.8117, heading: 110, altitude: 150 },
+  { label: 'İstanbul', latitude: 41.0231, longitude: 29.0122, heading: 45, altitude: 180 },
+  { label: 'Alpler', latitude: 46.6786, longitude: 7.8854, heading: 65, altitude: 240 },
+  { label: 'Colorado', latitude: 39.5323, longitude: -105.0604, heading: 270, altitude: 150 },
 ]
 const style: StyleSpecification = {
   version: 8, projection: { type: 'globe' },
@@ -23,9 +23,11 @@ const style: StyleSpecification = {
 }
 
 export default function WorldPicker({ initial, onClose, onLaunch }: {
-  initial?: WorldPoint; onClose: () => void; onLaunch: (point: WorldPoint) => Promise<void>
+  initial?: WorldStart; onClose: () => void; onLaunch: (point: WorldStart) => Promise<void>
 }) {
   const [draft, setDraft] = useState(() => ({ latitude: String(initial?.latitude ?? sites[0].latitude), longitude: String(initial?.longitude ?? sites[0].longitude) }))
+  const [heading, setHeading] = useState(() => String(initial?.heading ?? sites[0].heading))
+  const [altitude, setAltitude] = useState(() => String(initial?.altitude ?? worldAltitude.default))
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState('')
   const [launchError, setLaunchError] = useState('')
@@ -35,8 +37,11 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
   const marker = useRef<Marker | null>(null)
   const clicked = (point: WorldPoint) => setDraft({ latitude: point.latitude.toFixed(5), longitude: point.longitude.toFixed(5) })
   const point = { latitude: Number(draft.latitude), longitude: Number(draft.longitude) }
-  const valid = Boolean(draft.latitude.trim() && draft.longitude.trim()) && Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
+  const validPoint = Boolean(draft.latitude.trim() && draft.longitude.trim()) && Number.isFinite(point.latitude) && Number.isFinite(point.longitude)
     && Math.abs(point.latitude) < mercatorLatitude - .05 && Math.abs(point.longitude) <= 180
+  const bearing = Number(heading), height = Number(altitude)
+  const validHeading = Boolean(heading.trim()) && Number.isInteger(bearing) && bearing >= 0 && bearing <= 359
+  const valid = validPoint && validHeading && Number.isInteger(height) && height >= worldAltitude.min && height <= worldAltitude.max
 
   useEffect(() => { dialog.current?.showModal() }, [])
 
@@ -47,7 +52,10 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
         zoom: initial ? 8 : 2, pixelRatio: 1, dragRotate: false, pitchWithRotate: false, attributionControl: false })
       map.current = instance
       instance.addControl(new NavigationControl({ showCompass: false }), 'top-right')
-      marker.current = new Marker({ color: '#ffbd65' }).setLngLat(instance.getCenter()).addTo(instance)
+      const arrow = document.createElement('div')
+      arrow.className = 'earth-heading-marker'
+      arrow.setAttribute('aria-hidden', 'true')
+      marker.current = new Marker({ element: arrow, rotationAlignment: 'map' }).setLngLat(instance.getCenter()).addTo(instance)
       instance.on('click', ({ lngLat }) => clicked({ latitude: lngLat.lat, longitude: lngLat.wrap().lng }))
       instance.on('error', () => setNotice('Bazı uydu karoları yüklenemedi. Koordinatla konum seçebilirsin.'))
       return () => { marker.current?.remove(); marker.current = null; instance.remove(); map.current = null }
@@ -55,14 +63,15 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
   }, [initial])
 
   useEffect(() => {
-    if (valid) marker.current?.setLngLat([point.longitude, point.latitude])
-  }, [point.latitude, point.longitude, valid])
+    if (validPoint) marker.current?.setLngLat([point.longitude, point.latitude])
+    if (validHeading) marker.current?.setRotation(bearing)
+  }, [point.latitude, point.longitude, validPoint, validHeading, bearing])
 
   async function launch() {
     if (!valid || loading) return
     setLaunchError('')
     setLoading(true)
-    try { await onLaunch(point) }
+    try { await onLaunch({ ...point, heading: bearing, altitude: height }) }
     catch {
       setLaunchError('Bu konumun yükseklik verisi alınamadı. Tekrar dene veya başka bir nokta seç.')
       setLoading(false)
@@ -79,12 +88,16 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
       <div className="earth-presets" aria-label="Başlangıç konumları">
         {sites.map(site => <button type="button" key={site.label} disabled={loading} onClick={() => {
           clicked(site)
+          setHeading(String(site.heading))
+          setAltitude(String(site.altitude))
           map.current?.easeTo({ center: [site.longitude, site.latitude], zoom: 9, duration: 600 })
         }}>{site.label}</button>)}
       </div>
       <form onSubmit={event => { event.preventDefault(); void launch() }}>
         <label>Enlem<input type="number" name="latitude" step="any" value={draft.latitude} onChange={event => setDraft({ ...draft, latitude: event.target.value })} disabled={loading} /></label>
         <label>Boylam<input type="number" name="longitude" step="any" value={draft.longitude} onChange={event => setDraft({ ...draft, longitude: event.target.value })} disabled={loading} /></label>
+        <label>Başlangıç yönü (°)<input type="number" min="0" max="359" step="1" value={heading} onChange={event => setHeading(event.target.value)} disabled={loading} /></label>
+        <label>Yerden irtifa (m)<input type="number" min={worldAltitude.min} max={worldAltitude.max} step="1" value={altitude} onChange={event => setAltitude(event.target.value)} disabled={loading} /></label>
         <button type="submit" disabled={!valid || loading}>{loading ? 'Arazi yükleniyor…' : 'Burada uç'}</button>
       </form>
       {(launchError || notice) && <small role="status">{launchError || notice}</small>}

@@ -2,12 +2,14 @@ import { calmWeather } from './atmosphere'
 import type { Field } from './fields'
 
 export type WorldPoint = { latitude: number; longitude: number }
+export type WorldStart = WorldPoint & { heading: number; altitude: number }
 export type Tile = { z: number; x: number; y: number }
 type Elevation = { size: number; heights: Float32Array }
 const circumference = 2 * Math.PI * 6378137
 export const mercatorLatitude = 85.05112878
 const elevationZoom = 13
 const tileTimeout = 12000
+export const worldAltitude = { min: 60, max: 600, default: 150 }
 const wrapped = (value: number, size: number) => ((value % size) + size) % size
 export const satelliteTemplate = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg'
 export const satelliteCredit = 'EOxCloudless by EOX IT Services GmbH · modified Copernicus Sentinel data 2016'
@@ -22,13 +24,57 @@ export function geographic(x: number, y: number): WorldPoint {
 }
 
 export const tileKey = ({ z, x, y }: Tile) => [z, x, y].join('/')
+export const tileAt = (z: number, x: number, y: number): Tile =>
+  ({ z, x: Math.floor(x * 2 ** z), y: Math.floor(y * 2 ** z) })
 export function parentTile(tile: Tile, z: number): Tile {
   const divider = 2 ** (tile.z - z)
   return { z, x: Math.floor(tile.x / divider), y: Math.floor(tile.y / divider) }
 }
 
+export const terrainSubdivisions = (z: number) => z === 14 ? 72 : z === 13 ? 46 : 24
+
+export function coarserNeighbor(tile: Tile, dx: number, dy: number, visible: ReadonlySet<string>) {
+  const adjacent = { z: tile.z, x: tile.x + dx, y: tile.y + dy }
+  for (let z = tile.z - 1; z >= 9; z--) {
+    const candidate = parentTile(adjacent, z)
+    if (visible.has(tileKey(candidate))) return candidate
+  }
+}
+
+/** A fine tile's shared edge lies on the coarser mesh's straight vertex segments. */
+export function coarseEdgeHeight(tile: Tile, horizontal: boolean, x: number, y: number,
+  sample: (x: number, y: number, zoom: number) => number) {
+  const count = 2 ** tile.z
+  const subdivisions = terrainSubdivisions(tile.z)
+  const origin = horizontal ? tile.x : tile.y
+  const coordinate = horizontal ? x : y
+  const segment = Math.max(0, Math.min(subdivisions, (coordinate * count - origin) * subdivisions))
+  const start = Math.min(subdivisions - 1, Math.floor(segment))
+  const a = (origin + start / subdivisions) / count
+  const b = (origin + (start + 1) / subdivisions) / count
+  const before = horizontal ? sample(a, y, tile.z) : sample(x, a, tile.z)
+  const after = horizontal ? sample(b, y, tile.z) : sample(x, b, tile.z)
+  return before + (after - before) * (segment - start)
+}
+
 export function satelliteUrl({ z, x, y }: Tile) {
   return satelliteTemplate.replace('{z}', String(z)).replace('{x}', String(wrapped(x, 2 ** z))).replace('{y}', String(y))
+}
+
+function loadSatellite(tile: Tile): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const image = new Image()
+    image.crossOrigin = 'anonymous'
+    const timeout = window.setTimeout(() => finish(null), 11000)
+    function finish(result: HTMLImageElement | null) {
+      window.clearTimeout(timeout)
+      image.onload = image.onerror = null
+      resolve(result)
+    }
+    image.onload = () => finish(image)
+    image.onerror = () => finish(null)
+    image.src = satelliteUrl(tile)
+  })
 }
 
 export const terrariumHeight = (red: number, green: number, blue: number) => red * 256 + green + blue / 256 - 32768
@@ -72,13 +118,16 @@ export function terrainTiles(x: number, y: number): Tile[] {
 
 export class WorldTerrain {
   readonly origin: ReturnType<typeof mercator>
+  readonly startTile: Tile
   readonly scale: number
   datum = 0
   private elevations = new Map<string, Elevation>()
   private requests = new Map<string, Promise<void>>()
+  private startPhoto?: Promise<HTMLImageElement | null>
 
   constructor(readonly point: WorldPoint) {
     this.origin = mercator(point)
+    this.startTile = tileAt(14, this.origin.x, this.origin.y)
     this.scale = circumference * Math.cos(point.latitude * Math.PI / 180)
   }
 
@@ -119,9 +168,11 @@ export class WorldTerrain {
     return this.datum
   }
 
-  height = (x: number, south: number, maxZoom = elevationZoom) => {
+  heightAtMercator = (x: number, y: number, maxZoom = elevationZoom) => this.#sample(x, y, maxZoom) - this.datum
+
+  height = (x: number, south: number) => {
     const point = this.toMercator(x, south)
-    return this.#sample(point.x, point.y, maxZoom) - this.datum
+    return this.heightAtMercator(point.x, point.y)
   }
 
   preload(tile: Tile): Promise<void> {
@@ -140,17 +191,20 @@ export class WorldTerrain {
   }
 
   async prepare() {
-    const n = 2 ** elevationZoom
-    const x = Math.floor(this.origin.x * n), y = Math.floor(this.origin.y * n)
-    await this.preload({ x, y, z: elevationZoom })
+    this.startPhoto = loadSatellite(this.startTile)
+    await this.preload(this.startTile)
     this.datum = this.#sample(this.origin.x, this.origin.y, elevationZoom)
   }
 
-  field(): Field {
+  satellite(tile: Tile) {
+    return tileKey(tile) === tileKey(this.startTile) && this.startPhoto ? this.startPhoto : loadSatellite(tile)
+  }
+
+  field(heading = 0): Field {
     return {
       id: 'world', name: 'Dünya Keşfi', subtitle: 'Gerçek uydu görüntüsü ve arazi', biome: 'grass',
       seed: 0, weather: { ...calmWeather, label: 'Sakin hava' }, datumAltitude: this.datum,
-      runway: { heading: 0, length: 0, width: 0, surface: 'grass', center: [0, 0], elevation: 0 },
+      runway: { heading, length: 0, width: 0, surface: 'grass', center: [0, 0], elevation: 0 },
       waterLevel: -Infinity, height: this.height, clearing: 0, trees: 0, buildings: 0, ridgeLift: 0, notes: '',
     }
   }
