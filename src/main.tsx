@@ -19,6 +19,7 @@ import { findGuidedAxis, guidedRange, type GuidedStep } from './guidedSetup'
 import { aerialSource, satelliteCredit, WorldTerrain, type WorldStart } from './sim/worldTerrain'
 import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
 import './style.css'
+import './workspace.css'
 
 const FlightScene = lazy(() => import('./scene/FlightScene'))
 const AircraftHangar = lazy(() => import('./AircraftHangar'))
@@ -63,6 +64,7 @@ function ControllerDiscovery({ pads, selected, onSelect, onMessage }: {
 }
 function App() {
   const simRef = useRef<HTMLElement>(null)
+  const [fullscreenMessage, setFullscreenMessage] = useState('')
   const [vehicle, setVehicle] = useState('trainer')
   const [engine] = useState(() => newFlightSimulation('trainer'))
   const simulation = useRef(engine)
@@ -698,14 +700,37 @@ function App() {
   const retractable = hasRetractableGear(aircraft)
   const gearExtension = hud.gearPosition ?? 1
   const gearLabel = gearExtension > .975 ? 'Açık' : gearExtension < .025 ? 'Kapalı' : airframeConfig.gearDown ? 'Açılıyor' : 'Kapanıyor'
-  return <main><header><div className="brand"><img className="brand-icon" src={`${import.meta.env.BASE_URL}flightsimrc.svg`} width="44" height="44" alt="" /><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
-    <section className="sim" ref={simRef}>
-      <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div>
-        <div className="simtop-actions">
-          <button className="hangar-launch" type="button" aria-haspopup="dialog" onClick={() => { keys.current.clear(); setShowHangar(true) }}>Uçak seç</button>
-          <button className="earth-launch" type="button" disabled={Boolean(roomCode)} onClick={() => { keys.current.clear(); setShowWorld(true) }}>Dünya haritası</button>
+  return <main>
+    <header className="site-header">
+      <div className="brand">
+        <img className="brand-icon" src={`${import.meta.env.BASE_URL}flightsimrc.svg`} width="42" height="42" alt="" />
+        <div><h1>FlightSim<span>RC</span></h1><small>Uçuş Akademisi</small></div>
+      </div>
+      <nav aria-label="Simülatör">
+        <span className="live">{roomStatus === 'connected' ? `Oda ${roomCode} · ${roomCount} pilot` : 'Solo eğitim'}</span>
+        <button type="button" onClick={() => setShowRoom(true)}>Çok oyunculu</button>
+        <button type="button" onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>Kumanda ayarları</button>
+      </nav>
+    </header>
+    <section className="sim" ref={simRef} aria-labelledby="active-aircraft">
+      <div className="flight-header">
+        <div className="flight-aircraft">
+          <h2 id="active-aircraft">{aircraft.name}</h2>
+          <p>{aircraft.category}</p>
         </div>
-        <div className="flight-status">AGL {Math.round(Math.max(0, engine.state.agl))} m · Gaz %{Math.round(controls.current.throttle * 100)} · {padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
+        <div className="flight-launchers">
+          <button className="hangar-launch" type="button" aria-haspopup="dialog" onClick={() => { keys.current.clear(); setShowHangar(true) }}>Uçak seç</button>
+          <button className="earth-launch" type="button" aria-haspopup="dialog" disabled={Boolean(roomCode)} onClick={() => { keys.current.clear(); setShowWorld(true) }}>Dünya haritası</button>
+        </div>
+        <dl className="flight-telemetry" aria-label="Uçuş verileri">
+          <div><dt>AGL</dt><dd>{Math.round(Math.max(0, engine.state.agl))} <span>m</span></dd></div>
+          <div><dt>Gaz</dt><dd>%{Math.round(controls.current.throttle * 100)}</dd></div>
+          <div className="telemetry-input">
+            <dt>{padName !== 'Klavye' && !controllerArmed ? 'Kumanda ayarlarından etkinleştir' : 'Girdi'}</dt>
+            <dd title={padName}>{padName.slice(0, 42)}</dd>
+          </div>
+        </dl>
+      </div>
       <div className="viewport">
         <Suspense fallback={<div className="scene-loading" role="status">Uçuş alanı yükleniyor…</div>}>
           <FlightScene key={world?.key ?? 'practice'} state={flight} flightFrame={flightFrame} controls={controls} field={field} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle}
@@ -728,34 +753,52 @@ function App() {
           <small>{lessonHud.status === 'active' ? Math.ceil(Math.max(0, lessonHud.lesson.timeout - lessonHud.elapsed)) + ' sn kaldı' : lessonHud.message}</small>
         </div>}
       </div>
-      <div className="toolbar">
-        <label>EĞİTİM SAHASI <select value={world ? 'world' : fieldIndex} disabled={Boolean(roomCode)} onChange={e => {
-          const nextField = Number(e.target.value)
-          const nextVehicle = fields[nextField].runway.surface === 'water' ? 'float1200' : vehicle
-          setFieldIndex(nextField)
-          setCourse(fields[nextField].runway.heading)
-          setNavTarget('runway')
-          setVehicle(nextVehicle)
-          setWorld(undefined)
-          reset(nextVehicle, nextField, undefined, null)
-        }}>
-          {world && <option value="world" disabled>Dünya Keşfi</option>}
-          {fields.map((entry, index) => <option value={index} key={entry.id}>{entry.name}</option>)}
-        </select></label>
-        <label className="assist-choice">UÇUŞ MODU <select value={assistMode} onChange={e => setAssistMode(e.target.value)}>
-          <option value="model">Modele özel</option>
-          {assistProfiles.map((profile, index) => <option key={index} value={String(index)}>{profile.label}</option>)}
-        </select></label>
-        <div>
-          <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'Göstergeleri gizle' : 'Göstergeleri göster'}</button>
-          <label className="camera-choice">GÖRÜŞ <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}>
-            <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option><option value="overview">Saha üstü</option><option value="inspect">Model inceleme</option>
+      <div className="flight-console">
+        <div className="console-primary">
+          <div className="camera-controls">
+            <label>Görüş <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}>
+              <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option><option value="overview">Saha üstü</option><option value="inspect">Model inceleme</option>
+            </select></label>
+            <label className="camera-zoom">Yakınlık <input type="range" min="0.65" max="2.2" step="0.05" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label>
+          </div>
+          <div className="flight-actions">
+            <button className="pause-action" type="button" onClick={e => { setPaused(!paused); e.currentTarget.blur() }}>{paused ? 'Devam et' : 'Duraklat'}</button>
+            <button type="button" onClick={e => { retry(); e.currentTarget.blur() }}>{lessonHud ? 'Dersi yeniden başlat' : 'Uçağı sıfırla'}</button>
+            <button type="button" onClick={() => void toggleSound()}>{soundOn ? 'Sesi kapat' : 'Sesi aç'}</button>
+            <button type="button" onClick={async () => {
+              setFullscreenMessage('')
+              const stage = simRef.current
+              const unavailable = 'Bu tarayıcı görünümünde tam ekran kullanılamıyor.'
+              try {
+                if (document.fullscreenElement) await document.exitFullscreen()
+                else if (stage?.requestFullscreen) await stage.requestFullscreen()
+                else setFullscreenMessage(unavailable)
+              } catch { setFullscreenMessage(unavailable) }
+            }}>Tam ekran</button>
+          </div>
+          {fullscreenMessage && <p className="fullscreen-feedback" role="status">{fullscreenMessage}</p>}
+        </div>
+        <div className="console-options">
+          <label>Eğitim sahası <select value={world ? 'world' : fieldIndex} disabled={Boolean(roomCode)} onChange={e => {
+            const nextField = Number(e.target.value)
+            const nextVehicle = fields[nextField].runway.surface === 'water' ? 'float1200' : vehicle
+            setFieldIndex(nextField)
+            setCourse(fields[nextField].runway.heading)
+            setNavTarget('runway')
+            setVehicle(nextVehicle)
+            setWorld(undefined)
+            reset(nextVehicle, nextField, undefined, null)
+          }}>
+            {world && <option value="world" disabled>Dünya Keşfi</option>}
+            {fields.map((entry, index) => <option value={index} key={entry.id}>{entry.name}</option>)}
           </select></label>
-          <label className="camera-zoom">YAKINLIK <input type="range" min="0.65" max="2.2" step="0.05" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label>
-          <button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>Tam ekran</button>
-          <button onClick={() => void toggleSound()}>{soundOn ? 'Sesi kapat' : 'Sesi aç'}</button>
-          <button onClick={e => { setPaused(!paused); e.currentTarget.blur() }}>{paused ? 'Devam et' : 'Duraklat'}</button>
-          <button onClick={e => { retry(); e.currentTarget.blur() }}>{lessonHud ? 'Dersi yeniden başlat' : 'Uçağı sıfırla'}</button>
+          <label>Uçuş modu <select value={assistMode} onChange={e => setAssistMode(e.target.value)}>
+            <option value="model">Modele özel</option>
+            {assistProfiles.map((profile, index) => <option key={index} value={String(index)}>{profile.label}</option>)}
+          </select></label>
+          <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'Göstergeleri gizle' : 'Göstergeleri göster'}</button>
+          {deckVisible && <FlightNavigation flight={hud} field={field} course={course} onCourseChange={setCourse}
+            target={navTarget} onTargetChange={setNavTarget} />}
         </div>
         {(aircraft.flaps || retractable) && <div className="configuration-controls">
           {aircraft.flaps && <label>FLAP (F)
@@ -771,6 +814,8 @@ function App() {
           </button>}
           {configMessage && <span role="status">{configMessage}</span>}
         </div>}
+      </div>
+      {(field.orthophoto || world) && <div className="map-sources" aria-label="Harita kaynakları">
         {field.orthophoto && <a className="terrain-credit" href={field.orthophoto.source} target="_blank" rel="noreferrer">{field.orthophoto.credit}</a>}
         {field.orthophoto?.center && <div className="earth-credit">
           <span><a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></span>
@@ -781,9 +826,7 @@ function App() {
           <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noreferrer">Mapzen / AWS Terrain Tiles</a>
           <span><a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></span>
         </div>}
-        {deckVisible && <FlightNavigation flight={hud} field={field} course={course} onCourseChange={setCourse}
-          target={navTarget} onTargetChange={setNavTarget} />}
-      </div>
+      </div>}
       {showWorld && <Suspense fallback={<div className="earth-picker" role="status">Dünya haritası açılıyor…</div>}>
         <WorldPicker initial={world?.start} onClose={closeWorld} onLaunch={launchWorld} />
       </Suspense>}
@@ -816,12 +859,13 @@ function App() {
         <p>{aircraft.skills.join(' · ')}</p>
       </div>
     </section>
-    <section className="info">
-      <div><strong>KLAVYE</strong><p>W / S gaz, oklar yatış ve irtifa, A / D yatış, Q / E yön dümeni. Donanımlı modellerde F flap, G iniş takımı. Bir menüdeyken uçuşa dönmek için sahneye tıkla.</p></div>
-      <div><strong>RC KUMANDA / JOYSTICK</strong><p>USB cihazını bağla ve bir kolu oynat. Eksik eksenlerde USB HID bağlantısını, kanal sırası veya yönü farklıysa rehberli kalibrasyonu kullan.</p></div>
-      <div><strong>UÇUŞ ALANI</strong><p>{field.notes}</p></div>
+    <section className="flight-guide" aria-label="Uçuş rehberi">
+      <div><h2>Klavye</h2><p><kbd>W</kbd> / <kbd>S</kbd> gaz, oklar yatış ve irtifa, <kbd>A</kbd> / <kbd>D</kbd> yatış, <kbd>Q</kbd> / <kbd>E</kbd> yön dümeni. Donanımlı modellerde <kbd>F</kbd> flap, <kbd>G</kbd> iniş takımı. Bir menüden uçuşa dönmek için sahneye tıkla.</p></div>
+      <div><h2>RC kumanda / joystick</h2><p>USB cihazını bağla ve bir kolu oynat. Eksik eksenlerde USB HID bağlantısını, kanal sırası veya yönü farklıysa rehberli kalibrasyonu kullan.</p></div>
+      <div><h2>Uçuş alanı</h2><p>{field.notes}</p></div>
     </section>
-    {showRoom && <div className="overlay" onClick={() => setShowRoom(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowRoom(false)}>✕</button><p className="eyebrow">CANLI UÇUŞ</p><h2>Çok oyunculu oda</h2>
+    {showRoom && <div className="overlay" onClick={() => setShowRoom(false)}><aside aria-labelledby="room-title" onClick={e => e.stopPropagation()}>
+      <div className="panel-heading"><h2 id="room-title">Çok oyunculu oda</h2><button type="button" className="close" aria-label="Çok oyunculu panelini kapat" onClick={() => setShowRoom(false)}>×</button></div>
       {roomCode ? <>
         <p><strong>Oda: {roomCode}</strong> · {roomIsProtected ? 'Şifreli' : 'Şifresiz'} · {roomCount} pilot</p>
         <p role="status">{roomStatus === 'connected' ? 'Bağlı' : roomStatus === 'connecting' ? 'Oda aranıyor…' : roomStatus === 'error' ? 'Bağlantı kurulamadı' : 'Bağlantı yok'}</p>
@@ -840,7 +884,18 @@ function App() {
       {roomMessage && <p role="alert">{roomMessage}</p>}
       <p className="muted">En fazla dört pilot. Şifreli odada yalnızca doğru kod ve şifreden türetilen kanala bağlanılır; bu sürümde sunucu tarafı hesap doğrulaması ve güçlü erişim denetimi yoktur.</p>
     </aside></div>}
-    {showSettings && <div className="overlay" onClick={() => setShowSettings(false)}><aside onClick={e => e.stopPropagation()}><button className="close" onClick={() => setShowSettings(false)}>✕</button><p className="eyebrow">KUMANDA AYARLARI</p><h2>Kumanda kanalları</h2><p>Bağlı cihaz: {padName}. Bir düğmeye basarak cihazı tarayıcıda etkinleştir.</p><ControllerDiscovery pads={availablePads} selected={selectedPadIndex} onSelect={index => { setSetup(null); setSelectedPadIndex(index); setControllerArmed(false); setPaused(true) }} onMessage={setControllerMessage} /><button type="button" className="diagnostic-action" onClick={() => void requestHidController()}>USB HID kumandası bağla</button><button type="button" className="diagnostic-action" onClick={() => void copyControllerReport()}>Kumanda tanı bilgisini kopyala</button><p className="quick-flight-hint">Gazı tam rölantiye indir, yatış/irtifa/yön kollarını ortala. Kalibrasyon adımlarına gerek kalmadan uçuşa geç.</p><button type="button" className="account-action quick-flight" disabled={!availablePads.length || Boolean(setup)} onClick={startWithoutCalibration}>▶ Kalibrasyonsuz uçuşa başla (gaz sıfırdayken)</button><div className="setup-card">
+    {showSettings && <div className="overlay" onClick={() => setShowSettings(false)}><aside aria-labelledby="settings-title" onClick={e => e.stopPropagation()}>
+      <div className="panel-heading"><h2 id="settings-title">Kumanda kanalları</h2><button type="button" className="close" aria-label="Kumanda panelini kapat" onClick={() => setShowSettings(false)}>×</button></div>
+      <p>Bağlı cihaz: {padName}. Bir düğmeye basarak cihazı tarayıcıda etkinleştir.</p>
+      <ControllerDiscovery pads={availablePads} selected={selectedPadIndex}
+        onSelect={index => { setSetup(null); setSelectedPadIndex(index); setControllerArmed(false); setPaused(true) }} onMessage={setControllerMessage} />
+      <div className="device-actions">
+        <button type="button" className="diagnostic-action" onClick={() => void requestHidController()}>USB HID kumandası bağla</button>
+        <button type="button" className="diagnostic-action" onClick={() => void copyControllerReport()}>Kumanda tanı bilgisini kopyala</button>
+      </div>
+      <p className="quick-flight-hint">Gazı tam rölantiye indir, yatış/irtifa/yön kollarını ortala. Kalibrasyon adımlarına gerek kalmadan uçuşa geç.</p>
+      <button type="button" className="account-action quick-flight" disabled={!availablePads.length || Boolean(setup)} onClick={startWithoutCalibration}>▶ Kalibrasyonsuz uçuşa başla (gaz sıfırdayken)</button>
+      <div className="setup-card">
       <strong>Kol testi · {signal.moving} hareketli / {signal.received} sinyal alınan / {signal.reported} bildirilen eksen</strong>
       <p>Her kolu yatay ve dikey yönde oynat. Canlı listede hareket eden eksen ve görülen aralık işaretlenir.</p>
       <button type="button" disabled={!padAxes.length} onClick={() => {
