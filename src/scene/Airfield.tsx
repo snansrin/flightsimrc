@@ -4,6 +4,8 @@ import * as THREE from 'three'
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js'
 import { airfieldPilotPosition, type Field } from '../sim/fields'
 import { windVector } from '../sim/atmosphere'
+import { terrainTiles, tileKey, WorldTerrain } from '../sim/worldTerrain'
+import { WorldBuildings } from './WorldBuildings'
 
 const palettes: Record<Field['biome'], { ground: string; sky: string; foliage: string }> = {
   grass: { ground: '#9daa84', sky: '#a9c6d3', foliage: '#547555' },
@@ -55,7 +57,7 @@ function OrthophotoTerrain({ geometry, file }: { geometry: THREE.BufferGeometry;
   map.colorSpace = THREE.SRGBColorSpace
   map.anisotropy = 8
   return <mesh geometry={geometry} receiveShadow>
-    <meshStandardMaterial map={map} color="#d7d9d5" roughness={.96} />
+    <meshLambertMaterial map={map} color="#f8f8ef" emissiveMap={map} emissive="#ffffff" emissiveIntensity={.24} />
   </mesh>
 }
 
@@ -70,6 +72,18 @@ function ChatfieldPavilion({ field }: { field: Field }) {
       <boxGeometry args={[10.6, .13, 3.3]} /><meshStandardMaterial color="#52635a" roughness={.76} metalness={.25} />
     </mesh>)}
   </group>
+}
+
+function TrainingCity({ field }: { field: Field }) {
+  const city = useMemo(() => {
+    const photo = field.orthophoto
+    if (!photo?.center) return null
+    const terrain = new WorldTerrain(photo.center)
+    const tiles = terrainTiles(terrain.origin.x, terrain.origin.y).filter(tile => tile.z === 14).slice(0, 4)
+    return { ground: { toLocal: terrain.toLocal.bind(terrain), height: field.height }, tiles, bound: photo.width / 2 }
+  }, [field])
+  if (!city) return null
+  return <>{city.tiles.map(tile => <WorldBuildings key={tileKey(tile)} tile={tile} world={city.ground} bound={city.bound} />)}</>
 }
 
 function FieldScenery({ field }: { field: Field }) {
@@ -187,9 +201,11 @@ function WaterSurface({ field }: { field: Field }) {
     normalMap.offset.x = (normalMap.offset.x + Math.sin(direction) * drift + 1) % 1
     normalMap.offset.y = (normalMap.offset.y + Math.cos(direction) * drift + 1) % 1
   })
+  const width = field.orthophoto?.width ?? 1600
   return <mesh position={[0, field.waterLevel + .003, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-    <planeGeometry args={[1600, 1600]} />
-    <meshStandardMaterial color={field.biome === 'island' ? '#3e8994' : '#4b798b'} normalMap={normalMap} roughness={.35} metalness={.16} />
+    <planeGeometry args={[width, width]} />
+    <meshStandardMaterial color={field.biome === 'island' ? '#3e8994' : '#4b798b'} normalMap={normalMap}
+      roughness={.35} metalness={.1} transparent={Boolean(field.orthophoto)} opacity={field.orthophoto ? .45 : 1} />
   </mesh>
 }
 
@@ -208,13 +224,15 @@ export function Airfield({ field }: { field: Field }) {
   const grassStrip = runway.surface === 'grass'
   return <>
     <primitive attach="background" object={sky} />
+    <primitive attach="environment" object={sky} />
     <fog attach="fog" args={[palettes[field.biome].sky, field.orthophoto ? 760 : 185, field.orthophoto ? 1530 : 710]} />
     <hemisphereLight args={['#ecf7ff', '#67735b', 1.65]} />
     <directionalLight position={[25, 35, -35]} intensity={2.35} castShadow shadow-mapSize={[2048, 2048]}
       shadow-camera-left={-75} shadow-camera-right={75} shadow-camera-top={75} shadow-camera-bottom={-75} shadow-bias={-.0001} />
     {field.orthophoto ? <>
       <OrthophotoTerrain geometry={terrain} file={field.orthophoto.file} />
-      <ChatfieldPavilion field={field} />
+      {field.id === 'chatfield' && <ChatfieldPavilion field={field} />}
+      {field.id === 'sehir' && <TrainingCity field={field} />}
     </> : <mesh geometry={terrain} receiveShadow><meshStandardMaterial vertexColors map={field.biome === 'snow' ? null : grass} roughness={.99} /></mesh>}
     {water && <WaterSurface field={field} />}
     <group position={[runway.center[0], runway.elevation, -runway.center[1]]} rotation={[0, THREE.MathUtils.degToRad(runway.heading), 0]}>
@@ -224,8 +242,8 @@ export function Airfield({ field }: { field: Field }) {
         </mesh>)) : <>
         <mesh position={[0, .013, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
           <planeGeometry args={[runway.width, runway.length]} />
-          <meshStandardMaterial map={grassStrip || field.orthophoto ? null : road} normalMap={grassStrip ? null : roadNormal}
-            color={field.orthophoto ? '#505457' : grassStrip ? '#6d8a4a' : runway.surface === 'concrete' ? '#c6bca7' : '#bcbcc0'}
+          <meshStandardMaterial map={grassStrip || field.id === 'chatfield' ? null : road} normalMap={grassStrip ? null : roadNormal}
+            color={grassStrip ? '#6d8a4a' : runway.surface === 'concrete' ? '#c6bca7' : '#65686b'}
             roughness={.88} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-3} />
         </mesh>
         {[-1, 1].map(side => <mesh key={side} position={[side * runway.width * .47, .025, 0]} rotation={[-Math.PI / 2, 0, 0]}>

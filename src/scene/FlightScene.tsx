@@ -35,7 +35,10 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
     forward.set(0, 0, 1).applyEuler(attitude)
     if (cameraMode === 'pilot') desired.set(...pilot)
     else if (cameraMode === 'onboard') desired.set(0, .2, aircraft.visual.noseLength + .12).applyEuler(attitude).add(ref.current.position)
-    else if (cameraMode === 'overview') desired.set(s.position[0], s.position[1] + (field.runway.length ? 150 : 800) * zoom, s.position[2] - 5)
+    else if (cameraMode === 'overview') {
+      const height = field.orthophoto ? field.orthophoto.width * .17 : field.runway.length ? 150 : 800
+      desired.set(s.position[0], s.position[1] + height / zoom, s.position[2] - 5)
+    }
     else if (cameraMode === 'inspect') {
       desired.set(chaseDistance * .73, chaseDistance * .42, chaseDistance * .76).applyAxisAngle(camera.up.set(0, 1, 0), s.yaw).add(ref.current.position)
       desired.y = Math.max(desired.y, field.height(desired.x, -desired.z) + .2)

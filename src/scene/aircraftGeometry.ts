@@ -24,7 +24,7 @@ function meshData(points: number[], indices: number[], colors?: number[]) {
   return geometry
 }
 
-function loft(profile: Frame[], length: number, radius: number, tip: number, colorAt?: (station: number, side: number, height: number) => THREE.Color) {
+function loft(profile: Frame[], length: number, radius: number, tip: number, colorAt?: (station: number, side: number, height: number) => THREE.Color, sectionalPower = 1) {
   const radial = 48, rows = 96, stride = radial + 1
   const points: number[] = [], colors: number[] = [], indices: number[] = []
   const stations = profile.map(row => row[0])
@@ -36,7 +36,9 @@ function loft(profile: Frame[], length: number, radius: number, tip: number, col
     for (let side = 0; side <= radial; side++) {
       const angle = 2 * Math.PI * side / radial
       const horizontal = Math.cos(angle), vertical = Math.sin(angle)
-      points.push(radius * shape.x * horizontal, radius * (shape.z + shape.y * vertical), tip + length * (station - 1))
+      const x = Math.sign(horizontal) * Math.abs(horizontal) ** sectionalPower
+      const y = Math.sign(vertical) * Math.abs(vertical) ** sectionalPower
+      points.push(radius * shape.x * x, radius * (shape.z + shape.y * y), tip + length * (station - 1))
       colorAt?.(station, horizontal, vertical).toArray(colors, colors.length)
       if (!row || !side) continue
       const at = row * stride + side
@@ -51,28 +53,41 @@ function loft(profile: Frame[], length: number, radius: number, tip: number, col
 export function fuselageGeometry(spec: AircraftSpec) {
   const { visual } = spec
   const paint = new THREE.Color(visual.color), stripe = new THREE.Color(visual.accent), trim = new THREE.Color(visual.trim)
+  const belly = paint.clone().lerp(trim, .19), seam = paint.clone().lerp(trim, .30)
   const profile = noses[spec.id] ?? noses.trainer1500
   return loft(profile, visual.fuselageLength, visual.fuselageRadius, visual.noseLength, (s, side, height) => {
     if (spec.prop.kind === 'edf' && s > .94) return trim
+    if (spec.prop.kind === 'prop' && s > .885 && s < .898) return seam
     if (Math.abs(side) > .64 && Math.abs(height - (s * .60 - .28)) < (spec.prop.kind === 'edf' ? .23 : .14)) return stripe
     if (spec.id === 'warbird1400' && s > .89) return stripe
-    if (height < -.82 && s > .19 && s < .88) return paint.clone().lerp(trim, .19)
+    if (height < -.82 && s > .19 && s < .88) return belly
     return paint
-  })
+  }, visual.canopy === 'greenhouse' ? .83 : 1)
 }
 
 export function cabinGeometry(spec: AircraftSpec) {
   const radius = spec.visual.fuselageRadius
   const length = spec.visual.fuselageLength
   const jet = spec.prop.kind === 'edf'
+  const greenhouse = spec.visual.canopy === 'greenhouse'
   const frames: Frame[] = jet
     ? [[0,.06,.052,.57],[.16,.55,.33,.77],[.39,.82,.43,.84],[.62,.74,.39,.77],[.81,.46,.28,.68],[1,.06,.045,.5]]
-    : [[0,.055,.05,.7],[.18,.69,.39,.79],[.41,.8,.48,.84],[.63,.78,.46,.83],[.83,.56,.33,.76],[1,.03,.035,.55]]
+    : greenhouse
+      ? [[0,.20,.03,.62],[.12,.78,.27,.84],[.26,.96,.34,.96],[.57,.94,.35,.97],[.76,.86,.34,.93],[.94,.63,.20,.77],[1,.04,.028,.70]]
+      : [[0,.055,.05,.7],[.18,.69,.39,.79],[.41,.8,.48,.84],[.63,.78,.46,.83],[.83,.56,.33,.76],[1,.03,.035,.55]]
   const glint = new THREE.Color(jet ? '#3d728a' : '#4a7282'), shadow = new THREE.Color('#182830'), frame = new THREE.Color(spec.visual.trim)
-  return loft(frames, length * (jet ? .29 : .255), radius, spec.visual.noseLength - length * (jet ? .21 : .162), (station, _, height) => {
+  return loft(frames, length * (jet ? .29 : greenhouse ? .31 : .255), radius, spec.visual.noseLength - length * (jet ? .21 : .162), (station, side, height) => {
     if (station < .095 || station > .91 || station > .54 && station < .583 || height < -.55) return frame
+    if (greenhouse && (Math.abs(side) < .33 || station > .29 && station < .33)) return frame
     return shadow.clone().lerp(glint, Math.min(1, (height + .5) * .68))
-  })
+  }, greenhouse ? .62 : 1)
+}
+
+export function floatHullGeometry(length: number, radius: number, paint: string, trim: string) {
+  const hull: Frame[] = [[0,.16,.20,.22],[.14,.74,.57,.04],[.31,.86,.65,.02],[.49,1,.72,-.15],[.52,.97,.91,-.22],
+    [.71,.94,.76,-.05],[.88,.68,.58,.14],[.965,.29,.31,.31],[1,.028,.028,.38]]
+  const upper = new THREE.Color(paint), keel = new THREE.Color(trim)
+  return loft(hull, length, radius, length * .53, (_, _side, height) => height > -.34 ? upper : keel, .72)
 }
 
 export function wingPieces(spec: AircraftSpec): Piece[] {
@@ -81,6 +96,7 @@ export function wingPieces(spec: AircraftSpec): Piece[] {
   const dihedral = Math.tan(THREE.MathUtils.degToRad(visual.dihedral))
   const chord = spec.chord * 2 / (1 + visual.taper)
   const base = new THREE.Color(visual.color), accent = new THREE.Color(visual.accent), trim = new THREE.Color(visual.trim)
+  const pigment = new THREE.Color()
   const wing = (fraction: number, section: number, top: number) => {
     const c = chord * THREE.MathUtils.lerp(1, visual.taper, fraction) * (1 - .48 * THREE.MathUtils.smoothstep(fraction, .93, 1))
     const thickness = .6 * (.2969 * Math.sqrt(section) - .126 * section - .3516 * section ** 2 + .2843 * section ** 3 - .1036 * section ** 4)
@@ -99,9 +115,13 @@ export function wingPieces(spec: AircraftSpec): Piece[] {
         const point = wing(s, section, Math.sign(top)).sub(pivot)
         point.toArray(points, points.length)
         const pattern = s + .13 * section
-        const color = s > .95 || pattern > .66 && pattern < .83 || spec.id === 'warbird1400' && section < .12 ? accent
-          : pattern > .63 && pattern < .66 || control && section < front + .025 ? trim : base
-        color.toArray(colors, colors.length)
+        const stripe = THREE.MathUtils.smoothstep(pattern, .66, .695) * (1 - THREE.MathUtils.smoothstep(pattern, .805, .84))
+        const tip = THREE.MathUtils.smoothstep(s, .925, .97)
+        const leadingEdge = spec.id === 'warbird1400' ? 1 - THREE.MathUtils.smoothstep(section, .085, .13) : 0
+        const border = THREE.MathUtils.smoothstep(pattern, .61, .637) * (1 - THREE.MathUtils.smoothstep(pattern, .65, .686))
+        const hinge = control ? 1 - THREE.MathUtils.smoothstep(section - front, .01, .045) : 0
+        pigment.copy(base).lerp(trim, Math.max(border * .72, hinge)).lerp(accent, Math.max(stripe, tip, leadingEdge))
+        pigment.toArray(colors, colors.length)
         if (!row || !col) continue
         const i = row * stride + col
         indices.push(i, i - stride, i - stride - 1, i, i - stride - 1, i - 1)

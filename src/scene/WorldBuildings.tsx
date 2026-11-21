@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Tile, WorldTerrain } from '../sim/worldTerrain'
 
 let tileTemplate: Promise<string> | undefined
+type BuildingGround = Pick<WorldTerrain, 'toLocal' | 'height'>
 function buildingSource() {
   tileTemplate ??= fetch('https://tiles.openfreemap.org/planet', { signal: AbortSignal.timeout(8000) })
     .then(async response => {
@@ -17,7 +18,7 @@ function buildingSource() {
   return tileTemplate
 }
 
-async function loadBuildings(world: WorldTerrain, tile: Tile, signal: AbortSignal) {
+async function loadBuildings(world: BuildingGround, tile: Tile, signal: AbortSignal, bound: number) {
   const count = 2 ** tile.z
   const column = ((tile.x % count) + count) % count
   const source = await buildingSource()
@@ -38,6 +39,8 @@ async function loadBuildings(world: WorldTerrain, tile: Tile, signal: AbortSigna
       const middle = outer.reduce((sum, vertex) => sum.add(new THREE.Vector2(vertex.x, vertex.y)), new THREE.Vector2()).divideScalar(outer.length)
       // MVT tiles include a buffer around their edges. Draw the footprint in its owning tile only.
       if (middle.x < 0 || middle.y < 0 || middle.x >= extent || middle.y >= extent) continue
+      const [x, south] = world.toLocal((tile.x + middle.x / extent) / count, (tile.y + middle.y / extent) / count)
+      if (Math.abs(x) > bound || Math.abs(south) > bound) continue
       const shapeRing = (points: typeof outer) => points.map(point => {
         const [x, south] = world.toLocal((tile.x + point.x / extent) / count, (tile.y + point.y / extent) / count)
         return new THREE.Vector2(x, south)
@@ -46,7 +49,6 @@ async function loadBuildings(world: WorldTerrain, tile: Tile, signal: AbortSigna
       if (Math.abs(THREE.ShapeUtils.area(outline)) < 12) continue
       const shape = new THREE.Shape(outline)
       shape.holes = holes.map(hole => new THREE.Path(shapeRing(hole)))
-      const [x, south] = world.toLocal((tile.x + middle.x / extent) / count, (tile.y + middle.y / extent) / count)
       const level = world.height(x, south) + minHeight
       const geometry = new THREE.ExtrudeGeometry(shape, { depth: roofHeight - minHeight + (minHeight === 0 ? 2 : 0), bevelEnabled: false })
       geometry.rotateX(-Math.PI / 2)
@@ -64,17 +66,17 @@ async function loadBuildings(world: WorldTerrain, tile: Tile, signal: AbortSigna
   return merged
 }
 
-export function WorldBuildings({ world, tile }: { world: WorldTerrain; tile: Tile }) {
+export function WorldBuildings({ world, tile, bound = Infinity }: { world: BuildingGround; tile: Tile; bound?: number }) {
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null)
   useEffect(() => {
     const request = new AbortController()
     let current: THREE.BufferGeometry | null = null
-    void loadBuildings(world, tile, request.signal).then(result => {
+    void loadBuildings(world, tile, request.signal, bound).then(result => {
       if (request.signal.aborted) result?.dispose()
       else { current = result; setGeometry(result) }
     }).catch(() => { /* Terrain and flight continue independently of the vector service. */ })
     return () => { request.abort(); current?.dispose() }
-  }, [world, tile])
+  }, [world, tile, bound])
   if (!geometry) return null
   return <mesh geometry={geometry} name="OpenStreetMap buildings">
     <meshStandardMaterial vertexColors roughness={.92} />

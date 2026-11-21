@@ -4,7 +4,17 @@ import * as THREE from 'three'
 import type { Controls, FlightState } from '../flight'
 import type { AircraftSpec } from '../sim/types'
 
-import { cabinGeometry, empennageGeometry, fuselageGeometry, wingPieces } from './aircraftGeometry'
+import { cabinGeometry, empennageGeometry, floatHullGeometry, fuselageGeometry, wingPieces } from './aircraftGeometry'
+
+function Brace({ from, to, width = .005 }: { from: [number, number, number]; to: [number, number, number]; width?: number }) {
+  const start = new THREE.Vector3(...from), end = new THREE.Vector3(...to)
+  const axis = end.clone().sub(start)
+  const orientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.clone().normalize())
+  return <mesh position={start.addScaledVector(axis, .5)} quaternion={orientation} castShadow>
+    <cylinderGeometry args={[width * .88, width, axis.length(), 10]} />
+    <meshStandardMaterial color="#a5b0b7" roughness={.44} metalness={.52} />
+  </mesh>
+}
 
 export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; controls: React.RefObject<Controls>; state?: React.RefObject<FlightState> }) {
   const { visual, prop } = spec
@@ -29,6 +39,9 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
   const wing = useMemo(() => wingPieces(spec), [spec])
   const fuselage = useMemo(() => fuselageGeometry(spec), [spec])
   const canopy = useMemo(() => cabinGeometry(spec), [spec])
+  const floatHull = useMemo(() => visual.floats
+    ? floatHullGeometry(visual.fuselageLength * .74, visual.fuselageRadius * .59, visual.color, visual.accent)
+    : null, [visual])
   const blade = useMemo(() => {
     const shape = new THREE.Shape()
     shape.moveTo(-.015, .018)
@@ -36,13 +49,20 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
     shape.quadraticCurveTo(.026, .52, .041, .48)
     shape.quadraticCurveTo(.023, .27, .027, .018)
     shape.closePath()
-    return new THREE.ExtrudeGeometry(shape, { depth: .009, bevelEnabled: true, bevelSize: .003, bevelThickness: .002, bevelSegments: 2 })
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: .009, bevelEnabled: true, bevelSize: .003, bevelThickness: .002, bevelSegments: 2 })
+    const vertices = geometry.getAttribute('position')
+    const paint = new THREE.Color('#28323a'), safetyTip = new THREE.Color('#f7d47e')
+    const colors = new Float32Array(vertices.count * 3)
+    for (let i = 0; i < vertices.count; i++) (vertices.getY(i) > .405 ? safetyTip : paint).toArray(colors, i * 3)
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    return geometry
   }, [])
   useEffect(() => {
     wing.forEach(piece => piece.geometry.dispose())
     fuselage.dispose()
     canopy.dispose()
-  }, [wing, fuselage, canopy])
+    floatHull?.dispose()
+  }, [wing, fuselage, canopy, floatHull])
   useEffect(() => () => blade.dispose(), [blade])
   useFrame((_, delta) => {
     const rpm = state?.current.engineSpeed ?? controls.current.throttle
@@ -80,7 +100,7 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
   const wingZ = -visual.wingZ
   const sweep = Math.tan(THREE.MathUtils.degToRad(visual.sweep))
   const dihedral = Math.tan(THREE.MathUtils.degToRad(visual.dihedral))
-  const bladeCount = spec.id === 'warbird1400' ? 3 : 2
+  const bladeCount = visual.propBlades
   return <group>
     <mesh geometry={fuselage} castShadow>
       <meshPhysicalMaterial vertexColors roughness={.33} clearcoat={.42} clearcoatRoughness={.27} />
@@ -105,15 +125,12 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
     {visual.canopy !== 'none' && <mesh geometry={canopy}>
       <meshPhysicalMaterial vertexColors metalness={.23} roughness={.22} clearcoat={.85} />
     </mesh>}
-    {visual.layout === 'high-wing' && visual.gearStyle === 'taildragger' && [-1, 1].map(side => {
+    {['trainer1500', 'cub800', 'float1200'].includes(spec.id) && [-1, 1].map(side => {
       const span = spec.span * .31
       const upper = wingY + span * dihedral
       const bottom = -radius * .7
-      return <mesh key={side} position={[side * span / 2, (upper + bottom) / 2, wingZ - span * sweep]}
-        rotation={[0, 0, -side * Math.atan2(span, upper - bottom)]} castShadow>
-        <cylinderGeometry args={[.005, .006, Math.hypot(span, upper - bottom), 8]} />
-        <meshStandardMaterial color={visual.trim} roughness={.53} />
-      </mesh>
+      return <Brace key={side} from={[side * radius * .78, bottom, wingZ - span * sweep]}
+        to={[side * span, upper, wingZ - span * sweep - spec.chord * .12]} width={.006} />
     })}
     {[-1, 1].map((side, index) => <group key={side} position={[0, wingY, wingZ]} scale={[side, 1, 1]}>
       {wing.map(({ geometry, pivot, control }, piece) => <group key={piece} position={pivot} ref={control ? node => {
@@ -153,10 +170,12 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
           <boxGeometry args={[.009, .09, .052]} /><meshStandardMaterial color={visual.trim} metalness={.28} />
         </mesh>
       }
-      return gear.kind === 'float'
-        ? <mesh key={gear.id} position={[right, -down, forward]} scale={[radius * .7, .048, length * .33]} castShadow>
-          <sphereGeometry args={[1, 20, 10]} /><meshStandardMaterial color={visual.accent} />
-        </mesh>
+      return gear.kind === 'float' && floatHull
+        ? <group key={gear.id} position={[right, -down + radius * .4, forward]}>
+          <mesh geometry={floatHull} castShadow><meshPhysicalMaterial vertexColors roughness={.38} clearcoat={.38} /></mesh>
+          {[-.15, .17].map(offset => <Brace key={offset} from={[0, radius * .32, offset]}
+            to={[-right * .68, down - radius * .98, offset * .74]} width={.007} />)}
+        </group>
         : <group key={gear.id} position={[right, 0, forward]} ref={node => {
           if (node) wheels.current.set(gear.id, node)
           else wheels.current.delete(gear.id)
@@ -175,7 +194,7 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
       <group ref={blades}>
         {Array.from({ length: bladeCount }, (_, index) => <mesh key={index} rotation={[0, 0, index * 2 * Math.PI / bladeCount]}
           geometry={blade} scale={[prop.diameter, prop.diameter, prop.diameter]}>
-          <meshStandardMaterial color={visual.trim} roughness={.65} />
+          <meshStandardMaterial vertexColors roughness={.65} />
         </mesh>)}
       </group>
       <mesh><circleGeometry args={[prop.diameter / 2, 32]} />

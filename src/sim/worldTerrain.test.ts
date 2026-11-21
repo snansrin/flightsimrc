@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { localWaypoint } from '../avionics'
 import { Simulation } from './simulation'
-import { coarseEdgeHeight, coarserNeighbor, geographic, mercator, parentTile, satelliteUrl, terrainSubdivisions, terrainTiles, terrariumHeight, tileKey, WorldTerrain } from './worldTerrain'
+import { aerialUrl, coarseEdgeHeight, coarserNeighbor, geographic, mercator, parentTile, satelliteUrl, terrainSubdivisions, terrainTiles, terrariumHeight, tileAt, tileKey, WorldTerrain } from './worldTerrain'
 
 describe('world terrain coordinates and level of detail', () => {
   it('round-trips local metres and crosses the international date line', () => {
@@ -57,5 +57,17 @@ describe('world terrain coordinates and level of detail', () => {
     const sample = (x: number) => ((x - start) / step) ** 2 * 12
     expect(coarseEdgeHeight(coarse, true, start + step / 2, y, sample)).toBeCloseTo(6)
     expect(coarseEdgeHeight(coarse, true, start + step, y, sample)).toBeCloseTo(12)
+  })
+
+  it('offers the detailed public USGS overlay only for close tiles wholly inside the contiguous United States', () => {
+    const boulder = mercator({ latitude: 40.08539, longitude: -105.2327 })
+    const ankara = mercator({ latitude: 39.9552, longitude: 32.8117 })
+    const request = aerialUrl(tileAt(14, boulder.x, boulder.y))
+    expect(request).toContain('USGSImageryOnly')
+    const params = new URL(request!).searchParams
+    expect(params.get('size')).toBe('768,768')
+    expect(params.get('bbox')?.split(',').map(Number)).toHaveLength(4)
+    expect(aerialUrl(tileAt(13, boulder.x, boulder.y))).toBeUndefined()
+    expect(aerialUrl(tileAt(14, ankara.x, ankara.y))).toBeUndefined()
   })
 })

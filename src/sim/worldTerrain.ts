@@ -1,5 +1,6 @@
 import { calmWeather } from './atmosphere'
 import type { Field } from './fields'
+import { lower48Boundary } from './lower48'
 
 export type WorldPoint = { latitude: number; longitude: number }
 export type WorldStart = WorldPoint & { heading: number; altitude: number }
@@ -13,6 +14,7 @@ export const worldAltitude = { min: 60, max: 600, default: 150 }
 const wrapped = (value: number, size: number) => ((value % size) + size) % size
 export const satelliteTemplate = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg'
 export const satelliteCredit = 'EOxCloudless by EOX IT Services GmbH · modified Copernicus Sentinel data 2016'
+export const aerialSource = 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer'
 
 export function mercator(point: WorldPoint) {
   const lat = Math.max(-mercatorLatitude, Math.min(mercatorLatitude, point.latitude)) * Math.PI / 180
@@ -61,11 +63,30 @@ export function satelliteUrl({ z, x, y }: Tile) {
   return satelliteTemplate.replace('{z}', String(z)).replace('{x}', String(wrapped(x, 2 ** z))).replace('{y}', String(y))
 }
 
-function loadSatellite(tile: Tile): Promise<HTMLImageElement | null> {
+function isLower48({ latitude, longitude }: WorldPoint) {
+  let inside = false
+  for (let i = 1; i < lower48Boundary.length; i++) {
+    const [ax, ay] = lower48Boundary[i - 1], [bx, by] = lower48Boundary[i]
+    if ((ay > latitude) !== (by > latitude) && longitude < (bx - ax) * (latitude - ay) / (by - ay) + ax) inside = !inside
+  }
+  return inside
+}
+
+export function aerialUrl(tile: Tile) {
+  if (tile.z < 14) return undefined
+  const n = 2 ** tile.z, x = wrapped(tile.x, n)
+  if (![0, 1].every(dy => [0, 1].every(dx => isLower48(geographic((x + dx) / n, (tile.y + dy) / n))))) return undefined
+  const west = (x / n - .5) * circumference, east = ((x + 1) / n - .5) * circumference
+  const south = (.5 - (tile.y + 1) / n) * circumference, north = (.5 - tile.y / n) * circumference
+  return aerialSource + '/export?bbox=' + [west, south, east, north].map(value => value.toFixed(3)).join(',')
+    + '&bboxSR=3857&imageSR=3857&size=768,768&format=jpg&f=image'
+}
+
+function loadSatellite(url: string, timeoutMs: number): Promise<HTMLImageElement | null> {
   return new Promise(resolve => {
     const image = new Image()
     image.crossOrigin = 'anonymous'
-    const timeout = window.setTimeout(() => finish(null), 11000)
+    const timeout = window.setTimeout(() => { finish(null); image.removeAttribute('src') }, timeoutMs)
     function finish(result: HTMLImageElement | null) {
       window.clearTimeout(timeout)
       image.onload = image.onerror = null
@@ -73,8 +94,14 @@ function loadSatellite(tile: Tile): Promise<HTMLImageElement | null> {
     }
     image.onload = () => finish(image)
     image.onerror = () => finish(null)
-    image.src = satelliteUrl(tile)
+    image.src = url
   })
+}
+
+async function bestSatellite(tile: Tile) {
+  const standard = loadSatellite(satelliteUrl(tile), 11000)
+  const detail = aerialUrl(tile)
+  return detail ? await loadSatellite(detail, 4500) ?? standard : standard
 }
 
 export const terrariumHeight = (red: number, green: number, blue: number) => red * 256 + green + blue / 256 - 32768
@@ -191,13 +218,13 @@ export class WorldTerrain {
   }
 
   async prepare() {
-    this.startPhoto = loadSatellite(this.startTile)
+    this.startPhoto = bestSatellite(this.startTile)
     await this.preload(this.startTile)
     this.datum = this.#sample(this.origin.x, this.origin.y, elevationZoom)
   }
 
   satellite(tile: Tile) {
-    return tileKey(tile) === tileKey(this.startTile) && this.startPhoto ? this.startPhoto : loadSatellite(tile)
+    return tileKey(tile) === tileKey(this.startTile) && this.startPhoto ? this.startPhoto : bestSatellite(tile)
   }
 
   field(heading = 0): Field {

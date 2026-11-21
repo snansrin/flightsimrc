@@ -3,6 +3,7 @@ import { calmWeather, type WeatherConfig } from './atmosphere'
 import type { GroundTraction } from './types'
 import { chatfieldDatum, chatfieldSize } from './chatfield-data'
 import { chatfieldHeight, chatfieldRunwayCenter, chatfieldRunwayHeading } from './chatfield-terrain'
+import { trainingImagery, type FieldOrthophoto } from './trainingImagery'
 
 export type Biome = 'grass' | 'coast' | 'alpine' | 'desert' | 'snow' | 'city' | 'island'
 
@@ -25,7 +26,7 @@ export type Field = {
   seed: number
   weather: WeatherConfig
   datumAltitude?: number
-  orthophoto?: { file: string; width: number; credit: string; source: string }
+  orthophoto?: FieldOrthophoto
   runway: Runway
   waterLevel: number
   /** Terrain height above datum, metres. */
@@ -55,6 +56,7 @@ export const fields: Field[] = [
     id: 'anadolu',
     name: 'Anadolu Eğitim Pisti',
     subtitle: 'Açık ova · sakin hava · 100 m asfalt',
+    orthophoto: trainingImagery.anadolu,
     biome: 'grass', seed: 11, weather: { ...calmWeather, windSpeed: 1.2, windDirection: 340, turbulence: 0.12, thermals: 0.35, label: 'Hafif rüzgâr' },
     runway: { heading: 0, length: 100, width: 9, surface: 'asphalt', center: [0, 0], elevation: 0 },
     waterLevel: -Infinity,
@@ -66,6 +68,7 @@ export const fields: Field[] = [
     id: 'ege',
     name: 'Ege Kıyı Pisti',
     subtitle: 'Deniz kenarı · yan rüzgâr · yüzdürmeli uçuş',
+    orthophoto: trainingImagery.ege,
     biome: 'coast', seed: 23, weather: { ...calmWeather, windSpeed: 3.6, windDirection: 260, turbulence: 0.3, thermals: 0.25, label: 'Deniz meltemi' },
     runway: { heading: 0, length: 90, width: 8, surface: 'asphalt', center: [0, 0], elevation: 0 },
     waterLevel: -0.35,
@@ -80,6 +83,7 @@ export const fields: Field[] = [
     id: 'alp',
     name: 'Alp Vadisi',
     subtitle: 'Dağ vadisi · türbülans · yamaç kaldırması',
+    orthophoto: trainingImagery.alp,
     biome: 'alpine', seed: 37, weather: { ...calmWeather, windSpeed: 5.5, windDirection: 290, turbulence: 0.55, thermals: 0.6, cloudBase: 1400, label: 'Vadi rüzgârı' },
     runway: { heading: 0, length: 80, width: 7, surface: 'grass', center: [0, 0], elevation: 0 },
     waterLevel: -Infinity,
@@ -95,6 +99,7 @@ export const fields: Field[] = [
     id: 'col',
     name: 'Çöl Meydanı',
     subtitle: 'Kumullar · sıcak hava · uzun görüş',
+    orthophoto: trainingImagery.col,
     biome: 'desert', seed: 53, weather: { ...calmWeather, windSpeed: 4.2, windDirection: 200, turbulence: 0.35, thermals: 0.85, label: 'Sıcak termal' },
     runway: { heading: 0, length: 110, width: 10, surface: 'concrete', center: [0, 0], elevation: 0 },
     waterLevel: -Infinity,
@@ -106,6 +111,7 @@ export const fields: Field[] = [
     id: 'kuzey',
     name: 'Kuzey Yaylası',
     subtitle: 'Karlı plato · soğuk yoğun hava',
+    orthophoto: trainingImagery.kuzey,
     biome: 'snow', seed: 71, weather: { ...calmWeather, windSpeed: 2.8, windDirection: 20, turbulence: 0.25, thermals: 0.1, label: 'Soğuk sakin' },
     runway: { heading: 0, length: 95, width: 8, surface: 'asphalt', center: [0, 0], elevation: 0 },
     waterLevel: -Infinity,
@@ -117,6 +123,7 @@ export const fields: Field[] = [
     id: 'sehir',
     name: 'Şehir Meydanı',
     subtitle: 'Binalar · drone ve heli nokta inişi',
+    orthophoto: trainingImagery.sehir,
     biome: 'city', seed: 89, weather: { ...calmWeather, windSpeed: 2.2, windDirection: 310, turbulence: 0.45, thermals: 0.2, label: 'Şehir türbülansı' },
     runway: { heading: 0, length: 40, width: 12, surface: 'concrete', center: [0, 0], elevation: 0 },
     waterLevel: -Infinity,
@@ -128,6 +135,7 @@ export const fields: Field[] = [
     id: 'ada',
     name: 'Ada Lagünü',
     subtitle: 'Su üstü · yüzdürmeli ve deniz uçağı',
+    orthophoto: trainingImagery.ada,
     biome: 'island', seed: 101, weather: { ...calmWeather, windSpeed: 3.0, windDirection: 240, turbulence: 0.28, thermals: 0.3, label: 'Lagün meltemi' },
     runway: { heading: 0, length: 200, width: 40, surface: 'water', center: [0, 0], elevation: 0 },
     waterLevel: 0,
@@ -146,7 +154,7 @@ export const fields: Field[] = [
     biome: 'grass', seed: 113,
     weather: { ...calmWeather, windSpeed: 2.1, windDirection: 78, turbulence: .14, thermals: .29, label: 'Hafif karşı rüzgâr' },
     datumAltitude: chatfieldDatum,
-    orthophoto: { file: 'chatfield-naip.jpg', width: chatfieldSize, credit: 'USDA NAIP / USGS 3DEP',
+    orthophoto: { file: 'chatfield-naip.jpg', width: chatfieldSize, place: 'Chatfield Aerodrome, Colorado', credit: 'USDA NAIP / USGS 3DEP',
       source: 'https://www.usgs.gov/national-map-supporting-themes' },
     runway: { heading: chatfieldRunwayHeading, length: 209.7, width: 16, surface: 'asphalt', center: chatfieldRunwayCenter, elevation: 0 },
     waterLevel: -Infinity,

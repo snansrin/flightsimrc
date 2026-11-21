@@ -3,7 +3,6 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Controls, FlightState } from '../flight'
 import { hangarAircraft } from '../hangar'
-import { Trainer } from './Trainer'
 import { FixedWing } from './FixedWing'
 
 function Rotor({ position, radius, throttle, vertical = false }: { position: [number, number, number]; radius: number; throttle: React.MutableRefObject<Controls>; vertical?: boolean }) {
@@ -55,7 +54,6 @@ function Helicopter({ controls }: { controls: React.MutableRefObject<Controls> }
 export function VehicleModel({ kind, controls, state }: { kind: string; controls: React.MutableRefObject<Controls>; state?: React.RefObject<FlightState> }) {
   if (kind === 'drone') return <Drone controls={controls} />
   if (kind === 'helicopter') return <Helicopter controls={controls} />
-  if (kind === 'trainer') return <Trainer controls={controls} />
   if (kind === 'cinedrone') return <group scale={1.24}><Drone controls={controls} /></group>
   return <FixedWing spec={hangarAircraft(kind)} controls={controls} state={state} />
 }

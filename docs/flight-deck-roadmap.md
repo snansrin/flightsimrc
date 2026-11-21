@@ -10,6 +10,24 @@ The globe uses MapLibre GL JS and the EOX Sentinel‑2 Cloudless 2016 raster til
 
 The 2016 Sentinel mosaic has roughly 10 m source imagery. Land cover and building models depend on data coverage, and detailed photogrammetry is outside this dataset. All services are accessed on demand and need an internet connection.
 
+The world picker has a labeled street map alongside the satellite layer. At the closest terrain detail level, tiles wholly inside the contiguous United States request a higher-resolution USGS aerial image using the same Web Mercator bounds. If that request fails or takes too long, the scene uses Sentinel imagery. The coverage check uses a simplified public-domain Natural Earth boundary.
+
+## Training imagery
+
+All eight training scenes use bundled aerial imagery. The seven exercise presets overlay their existing simulator runway dimensions and terrain profiles on the real photographs below. Chatfield also uses a measured elevation model and a reconstruction of the model aircraft strip. The place name in the simulator identifies the photograph's source geography.
+
+| Exercise preset | Source landscape | Centre (lat, lon) | Width |
+| --- | --- | --- | --- |
+| Anadolu Eğitim Pisti | Boulder Reservoir, Colorado | 40.08539, -105.23270 | 2.8 km |
+| Ege Kıyı Pisti | Fort Pierce Inlet, Florida | 27.47652, -80.29210 | 2.8 km |
+| Alp Vadisi | Roaring Fork Valley, Colorado | 39.20325, -106.85530 | 3.6 km |
+| Çöl Meydanı | Alvord Desert, Oregon | 42.54145, -118.53250 | 3.4 km |
+| Kuzey Yaylası | Mount Rainier, Washington | 46.80240, -121.73550 | 3.3 km |
+| Şehir Meydanı | Central Park, New York | 40.78165, -73.96657 | 3.0 km |
+| Ada Lagünü | Indian River Lagoon, Florida | 27.44375, -80.30980 | 3.3 km |
+
+The crops use the USGS Imagery Only export service in EPSG:3857. They are stored as WebP files and are loaded when the relevant scene is selected. Central Park additionally streams nearby OpenStreetMap building geometry where the vector service is available.
+
 The fixed-wing models use aircraft-specific fuselage cross-sections, swept tail meshes, fitted canopies and independent hinged surfaces. The Viper includes intake and exhaust geometry, the T‑28 has a radial cowling and a three-blade propeller. Select **Model inceleme** in **Görüş** for a close three-quarter view. Aerodynamic and controller settings are shared with the existing aircraft.
 
 - [EOxCloudless data and license](https://cloudless.eox.at/documentation/license)

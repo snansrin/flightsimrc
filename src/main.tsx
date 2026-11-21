@@ -16,7 +16,7 @@ import { ControllerSignalRow } from './ControllerSignalRow'
 import { choosePreferredPad } from './controllerSelection'
 import { prepareQuickFlight } from './quickFlight'
 import { findGuidedAxis, guidedRange, type GuidedStep } from './guidedSetup'
-import { satelliteCredit, WorldTerrain, type WorldStart } from './sim/worldTerrain'
+import { aerialSource, satelliteCredit, WorldTerrain, type WorldStart } from './sim/worldTerrain'
 import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
 import './style.css'
 
@@ -696,7 +696,8 @@ function App() {
         </Suspense>
         <div className="scene-label"><strong>{field.name}</strong><span>{coordinates
           ? [coordinates.latitude.toFixed(5), coordinates.longitude.toFixed(5)].join(', ')
-          : field.weather.windSpeed.toFixed(1) + ' m/s · ' + field.weather.windDirection + '° · ' + field.runway.length + ' m pist'}</span></div>
+          : field.weather.windSpeed.toFixed(1) + ' m/s · ' + field.weather.windDirection + '° · ' + field.runway.length + ' m pist'}</span>
+          {field.orthophoto?.place && <span>{field.orthophoto.place}</span>}</div>
         {world && imagery !== 'ready' && <span className="earth-status" role="status">{imagery === 'loading'
           ? 'Başlangıç arazisi yükleniyor…' : 'Başlangıç noktasında uydu görüntüsü yok.'}</span>}
         {cameraMode === 'onboard' && <div className="crosshair" aria-hidden="true">+</div>}
@@ -757,8 +758,12 @@ function App() {
           {configMessage && <span role="status">{configMessage}</span>}
         </div>}
         {field.orthophoto && <a className="terrain-credit" href={field.orthophoto.source} target="_blank" rel="noreferrer">{field.orthophoto.credit}</a>}
+        {field.id === 'sehir' && <div className="earth-credit">
+          <span><a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></span>
+        </div>}
         {world && <div className="earth-credit">
           <a href="https://cloudless.eox.at/" target="_blank" rel="noreferrer">{satelliteCredit}</a>
+          <a href={aerialSource} target="_blank" rel="noreferrer">USDA NAIP / USGS · ABD ortofotosu</a>
           <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noreferrer">Mapzen / AWS Terrain Tiles</a>
           <span><a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></span>
         </div>}

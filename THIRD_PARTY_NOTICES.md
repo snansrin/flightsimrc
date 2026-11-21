@@ -35,3 +35,5 @@ Dosyalar `public/textures/` altında tutulur. Uçak ve saha geometrisi proje iç
 - EOxCloudless by EOX IT Services GmbH, modified Copernicus Sentinel data 2016. [CC BY 4.0 ve servis şartları](https://cloudless.eox.at/documentation/license)
 - Mapzen/AWS Terrain Tiles sayısal yükseklik. [Terrain Tiles kaynak atıfları](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)
 - Bina ayak izleri ve yükseklikleri OpenFreeMap üzerinden alınır. [OpenFreeMap](https://openfreemap.org/) · [OpenMapTiles](https://openmaptiles.org/) · [OpenStreetMap katkıcıları](https://www.openstreetmap.org/copyright)
+- ABD ortofotosu ve yedi eğitim alanındaki WebP kırpmaları USDA NAIP kaynaklıdır. [USGS Imagery Only](https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer) · [Kamu malı NAIP görüntüleri](https://www.usgs.gov/programs/national-geospatial-program/supporting-themes)
+- ABD ana karası görüntü kapsaması için kullanılan sadeleştirilmiş sınır Natural Earth kamu malı verisinden türetilmiştir. [Natural Earth kullanım şartları](https://www.naturalearthdata.com/about/terms-of-use/)

@@ -390,6 +390,11 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
 .earth-toolbar h2, .earth-toolbar p { margin: 0; }
 .earth-toolbar p { color: #a8bec4; font-size: .87rem; margin-top: 5px; }
 .earth-globe { height: clamp(210px, 53dvh, 560px); background: #182f45; }
+.earth-map-wrap { position: relative; }
+.earth-map-layers { display: flex; gap: 4px; position: absolute; top: 10px; left: 10px; }
+.earth-picker .earth-map-layers button { background: #102630ef; font-size: .76rem; }
+.earth-picker .earth-map-layers button[aria-pressed="true"] { background: #8bd9c4; border-color: #8bd9c4; color: #162a32; }
+.earth-form .map-credit { font-size: .72rem; }
 .earth-heading-marker {
   width: 26px;
   height: 26px;

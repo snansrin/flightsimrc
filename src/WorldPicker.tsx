@@ -31,6 +31,7 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
   const [loading, setLoading] = useState(false)
   const [notice, setNotice] = useState('')
   const [launchError, setLaunchError] = useState('')
+  const [streetMap, setStreetMap] = useState(false)
   const dialog = useRef<HTMLDialogElement>(null)
   const surface = useRef<HTMLDivElement>(null)
   const map = useRef<Map | null>(null)
@@ -57,7 +58,7 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
       arrow.setAttribute('aria-hidden', 'true')
       marker.current = new Marker({ element: arrow, rotationAlignment: 'map' }).setLngLat(instance.getCenter()).addTo(instance)
       instance.on('click', ({ lngLat }) => clicked({ latitude: lngLat.lat, longitude: lngLat.wrap().lng }))
-      instance.on('error', () => setNotice('Bazı uydu karoları yüklenemedi. Koordinatla konum seçebilirsin.'))
+      instance.on('error', () => setNotice('Bazı harita karoları yüklenemedi. Koordinatla konum seçebilirsin.'))
       return () => { marker.current?.remove(); marker.current = null; instance.remove(); map.current = null }
     } catch { setNotice('Harita açılamadı. Koordinat girerek konum seçebilirsin.') }
   }, [initial])
@@ -78,12 +79,27 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
     }
   }
 
+  function chooseMap(streets: boolean) {
+    if (streets === streetMap || !map.current) return
+    setStreetMap(streets)
+    setNotice('')
+    map.current.setStyle(streets ? 'https://tiles.openfreemap.org/styles/liberty' : style, {
+      transformStyle: (_, next) => ({ ...next, projection: { type: 'globe' } }),
+    })
+  }
+
   return <dialog ref={dialog} className="earth-picker" aria-labelledby="earth-title" onCancel={event => { event.preventDefault(); onClose() }}>
     <div className="earth-toolbar">
       <div><h2 id="earth-title">Dünya Keşfi</h2><p>Haritadan bir nokta seç veya koordinat gir.</p></div>
       <button type="button" onClick={onClose} aria-label="Dünya haritasını kapat">Kapat</button>
     </div>
-    <div ref={surface} className="earth-globe" aria-label="Dünya uydu haritası" />
+    <div className="earth-map-wrap">
+      <div ref={surface} className="earth-globe" aria-label={streetMap ? 'Dünya yol haritası' : 'Dünya uydu haritası'} />
+      <div className="earth-map-layers" role="group" aria-label="Harita görüntüsü">
+        <button type="button" aria-pressed={!streetMap} onClick={() => chooseMap(false)}>Uydu</button>
+        <button type="button" aria-pressed={streetMap} onClick={() => chooseMap(true)}>Yollar ve yer adları</button>
+      </div>
+    </div>
     <div className="earth-form">
       <div className="earth-presets" aria-label="Başlangıç konumları">
         {sites.map(site => <button type="button" key={site.label} disabled={loading} onClick={() => {
@@ -101,7 +117,8 @@ export default function WorldPicker({ initial, onClose, onLaunch }: {
         <button type="submit" disabled={!valid || loading}>{loading ? 'Arazi yükleniyor…' : 'Burada uç'}</button>
       </form>
       {(launchError || notice) && <small role="status">{launchError || notice}</small>}
-      <a href="https://cloudless.eox.at/" target="_blank" rel="noreferrer">{satelliteCredit}</a>
+      {streetMap ? <span className="map-credit"><a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></span>
+        : <a href="https://cloudless.eox.at/" target="_blank" rel="noreferrer">{satelliteCredit}</a>}
     </div>
   </dialog>
 }
