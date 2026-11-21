@@ -7,7 +7,6 @@ import { hangar, hangarAircraft, soundFamily } from './hangar'
 import { airfieldPilotPosition, fields } from './sim/fields'
 import { assistProfiles } from './sim/simulation'
 import { assessLesson, beginLesson, lessons, type Lesson, type LessonRun } from './school'
-import { FieldMap } from './scene/FieldMap'
 import { FlightDeck, FlightNavigation } from './FlightDeck'
 import { type NavTarget } from './avionics'
 import type { CameraMode } from './scene/FlightScene'
@@ -17,10 +16,12 @@ import { ControllerSignalRow } from './ControllerSignalRow'
 import { choosePreferredPad } from './controllerSelection'
 import { prepareQuickFlight } from './quickFlight'
 import { findGuidedAxis, guidedRange, type GuidedStep } from './guidedSetup'
+import { satelliteCredit, WorldTerrain, type WorldPoint } from './sim/worldTerrain'
 import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roomTopic, type RemotePilot, type RoomPilot, type RoomState } from './multiplayer'
 import './style.css'
 
 const FlightScene = lazy(() => import('./scene/FlightScene'))
+const WorldPicker = lazy(() => import('./WorldPicker'))
 const zero: Controls = { throttle: 0, aileron: 0, elevator: 0, rudder: 0 }
 type IndexedHid = HidController & { index: number }
 
@@ -81,6 +82,10 @@ function App() {
   const keys = useRef(new Set<string>())
   const [hud, setHud] = useState(toDisplayFlight(simulation.current))
   const [fieldIndex, setFieldIndex] = useState(0)
+  const [world, setWorld] = useState<{ terrain: WorldTerrain; field: ReturnType<WorldTerrain['field']>; key: number }>()
+  const [showWorld, setShowWorld] = useState(() => new URLSearchParams(location.search).get('world') === '1')
+  const [imagery, setImagery] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const worldSelection = useRef(0)
   const [deckVisible, setDeckVisible] = useState(true)
   const [navTarget, setNavTarget] = useState<NavTarget>('runway')
   const [course, setCourse] = useState(0)
@@ -252,7 +257,7 @@ function App() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur) }
   }, [])
   useEffect(() => {
-    const listener = airfieldPilotPosition(fields[fieldIndex])
+    const listener = airfieldPilotPosition(world?.field ?? fields[fieldIndex])
     let frame = 0, last = performance.now(), accumulator = 0, display = 0
     const tick = (now: number) => {
       const delta = Math.min((now - last) / 1000, 0.1); last = now
@@ -342,7 +347,7 @@ function App() {
         const response = 1 - Math.exp(-delta * 7)
         controls.current = { throttle: Math.max(0, Math.min(1, controls.current.throttle + ((k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0)) * delta * .45)), aileron: controls.current.aileron + (target.aileron - controls.current.aileron) * response, elevator: controls.current.elevator + (target.elevator - controls.current.elevator) * response, rudder: controls.current.rudder + (target.rudder - controls.current.rudder) * response }
       }
-      if (!paused && !changedDevice) {
+      if (!paused && !showWorld && !changedDevice) {
         accumulator += delta
         while (accumulator >= 1 / 60) {
           applyDisplayControls(simulation.current, controls.current, configuration.current)
@@ -353,27 +358,29 @@ function App() {
         }
       }
       sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed,
-        paused || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
+        paused || showWorld || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
         activeCamera.current === 'pilot' ? listener : undefined)
       if (now - display > 100) { setHud({ ...flight.current }); if (lessonRun.current) setLessonHud({ ...lessonRun.current }); setPadAxes(pad ? [...pad.axes] : []); setAxisTravel(travel.current.axes.map(range => range && { ...range })); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame)
-  }, [calibration, controllerArmed, fieldIndex, mapping, selectedPadIndex, tuning, paused, setup, vehicle])
+  }, [calibration, controllerArmed, fieldIndex, mapping, selectedPadIndex, tuning, paused, setup, vehicle, world, showWorld])
   const clearLesson = () => {
     lessonRun.current = null
     setLessonHud(null)
   }
-  const reset = (kind = vehicle, nextField = fieldIndex, lesson?: Lesson) => {
+  const reset = (kind = vehicle, nextField = fieldIndex, lesson?: Lesson, nextWorld: typeof world | null = world) => {
+    const model = hangarAircraft(kind)
     engine.reset({
-      aircraft: hangarAircraft(kind).id,
-      field: physicsFieldId(nextField),
-      airborne: lesson && 'airborne' in lesson ? lesson.airborne : undefined,
+      aircraft: model.id,
+      field: nextWorld?.field ?? physicsFieldId(nextField),
+      airborne: nextWorld ? { altitude: 150, airspeed: model.family === 'fixed' ? model.envelope.cruise : 0, offset: 0 }
+        : lesson && 'airborne' in lesson ? lesson.airborne : undefined,
     })
     if (assistMode !== 'model') engine.assists = { ...engine.spec.assists, ...assistProfiles[Number(assistMode)] }
     flight.current = toDisplayFlight(engine)
     setConfiguration(cleanConfiguration)
-    controls.current = { ...zero }
+    controls.current = { ...zero, throttle: nextWorld && padName === 'Klavye' ? model.envelope.hoverThrottle ?? .56 : 0 }
     keys.current.clear()
     setHud(flight.current)
     if (lesson) {
@@ -382,11 +389,29 @@ function App() {
       setLessonHud({ ...run })
     } else clearLesson()
   }
+  const closeWorld = () => { worldSelection.current++; setShowWorld(false); keys.current.clear() }
+  const launchWorld = async (point: WorldPoint) => {
+    const key = ++worldSelection.current
+    const terrain = new WorldTerrain(point)
+    await terrain.prepare()
+    if (key !== worldSelection.current) return
+    const next = { terrain, field: terrain.field(), key }
+    setWorld(next)
+    setImagery('loading')
+    setCourse(0)
+    setNavTarget('runway')
+    setCameraMode('chase')
+    reset(vehicle, fieldIndex, undefined, next)
+    closeWorld()
+    setPaused(false)
+    simRef.current?.scrollIntoView({ block: 'start' })
+  }
   const retry = () => reset(vehicle, fieldIndex, lessonRun.current?.lesson)
   const launchLesson = () => {
     setVehicle(selectedLesson.aircraft)
     setFieldIndex(0)
-    reset(selectedLesson.aircraft, 0, selectedLesson)
+    setWorld(undefined)
+    reset(selectedLesson.aircraft, 0, selectedLesson, null)
     setPaused(false)
     simRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
@@ -619,7 +644,8 @@ function App() {
     let topic: string
     try { topic = await roomTopic(normalized, roomPassword) }
     catch { setRoomMessage('Şifre hazırlanamadı. Güvenli bağlantı kullandığından emin ol.'); return }
-    clearLesson()
+    if (world) { setWorld(undefined); reset(vehicle, fieldIndex, undefined, null) }
+    else clearLesson()
     localStorage.setItem('flight-pilot-name', name)
     setRoomMessage('')
     setRoomInput(normalized)
@@ -651,21 +677,27 @@ function App() {
   const livePreview = padAxes.length || padButtons.length
     ? gamepadControls({ axes: padAxes, buttons: padButtons.map(value => ({ value })) } as unknown as Gamepad, mapping, tuning, calibration)
     : null
-  const field = fields[fieldIndex]
+  const field = world?.field ?? fields[fieldIndex]
+  const coordinates = world?.terrain.coordinates(hud.position[0], -hud.position[2])
   const aircraft = hangarAircraft(vehicle)
   const retractable = hasRetractableGear(aircraft)
   const gearExtension = hud.gearPosition ?? 1
   const gearLabel = gearExtension > .975 ? 'Açık' : gearExtension < .025 ? 'Kapalı' : airframeConfig.gearDown ? 'Açılıyor' : 'Kapanıyor'
   return <main><header><div className="brand"><img className="brand-icon" src={`${import.meta.env.BASE_URL}flightsimrc.svg`} width="44" height="44" alt="" /><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
     <section className="sim" ref={simRef}>
-      <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div><div className="flight-status">AGL {Math.round(Math.max(0, engine.state.agl))} m · Gaz %{Math.round(controls.current.throttle * 100)} · {padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
+      <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div>
+        <button className="earth-launch" type="button" disabled={Boolean(roomCode)} onClick={() => { keys.current.clear(); setShowWorld(true) }}>Dünya haritası</button>
+        <div className="flight-status">AGL {Math.round(Math.max(0, engine.state.agl))} m · Gaz %{Math.round(controls.current.throttle * 100)} · {padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
       <div className="viewport">
         <Suspense fallback={<div className="scene-loading" role="status">Uçuş alanı yükleniyor…</div>}>
-          <FlightScene state={flight} controls={controls} field={field} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle}
-            peers={peers.filter(pilot => pilot.field === fieldIndex)} />
+          <FlightScene key={world?.key ?? 'practice'} state={flight} controls={controls} field={field} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle}
+            world={world?.terrain} onImagery={setImagery} peers={peers.filter(pilot => pilot.field === fieldIndex)} />
         </Suspense>
-        <div className="scene-label"><strong>{field.name}</strong><span>{field.weather.windSpeed.toFixed(1)} m/s · {field.weather.windDirection}° · {field.runway.length} m pist</span></div>
-        <FieldMap field={field} flight={hud} target={navTarget} />
+        <div className="scene-label"><strong>{field.name}</strong><span>{coordinates
+          ? [coordinates.latitude.toFixed(5), coordinates.longitude.toFixed(5)].join(', ')
+          : field.weather.windSpeed.toFixed(1) + ' m/s · ' + field.weather.windDirection + '° · ' + field.runway.length + ' m pist'}</span></div>
+        {world && imagery !== 'ready' && <span className="earth-status" role="status">{imagery === 'loading'
+          ? 'Uydu karoları yükleniyor…' : 'Uydu görüntüsü şu anda erişilemiyor.'}</span>}
         {cameraMode === 'onboard' && <div className="crosshair" aria-hidden="true">+</div>}
         {hud.crashed && <div className="crash"><strong>Uçuş sona erdi</strong><span>{engine.state.crashReason || 'Araç kaza yaptı.'}</span><button onClick={retry}>Yeniden başla</button></div>}
         {hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}
@@ -681,15 +713,17 @@ function App() {
         <label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value; setVehicle(next); reset(next) }}>
           {hangar.map(({ id, spec }) => <option key={id} value={id}>{spec.name} · {spec.category}</option>)}
         </select></label>
-        <label>UÇUŞ ALANI <select value={fieldIndex} disabled={Boolean(roomCode)} onChange={e => {
+        <label>EĞİTİM SAHASI <select value={world ? 'world' : fieldIndex} disabled={Boolean(roomCode)} onChange={e => {
           const nextField = Number(e.target.value)
           const nextVehicle = fields[nextField].runway.surface === 'water' ? 'float1200' : vehicle
           setFieldIndex(nextField)
           setCourse(fields[nextField].runway.heading)
           setNavTarget('runway')
           setVehicle(nextVehicle)
-          reset(nextVehicle, nextField)
+          setWorld(undefined)
+          reset(nextVehicle, nextField, undefined, null)
         }}>
+          {world && <option value="world" disabled>Dünya Keşfi</option>}
           {fields.map((entry, index) => <option value={index} key={entry.id}>{entry.name}</option>)}
         </select></label>
         <label className="assist-choice">UÇUŞ MODU <select value={assistMode} onChange={e => setAssistMode(e.target.value)}>
@@ -699,7 +733,7 @@ function App() {
         <div>
           <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'Göstergeleri gizle' : 'Göstergeleri göster'}</button>
           <label className="camera-choice">GÖRÜŞ <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}>
-            <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option><option value="overview">Saha üstü</option>
+            <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option><option value="overview">Saha üstü</option><option value="inspect">Model inceleme</option>
           </select></label>
           <label className="camera-zoom">YAKINLIK <input type="range" min="0.65" max="2.2" step="0.05" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label>
           <button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>Tam ekran</button>
@@ -722,9 +756,17 @@ function App() {
           {configMessage && <span role="status">{configMessage}</span>}
         </div>}
         {field.orthophoto && <a className="terrain-credit" href={field.orthophoto.source} target="_blank" rel="noreferrer">{field.orthophoto.credit}</a>}
+        {world && <div className="earth-credit">
+          <a href="https://cloudless.eox.at/" target="_blank" rel="noreferrer">{satelliteCredit}</a>
+          <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noreferrer">Mapzen / AWS Terrain Tiles</a>
+          <span><a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://www.openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></span>
+        </div>}
         {deckVisible && <FlightNavigation flight={hud} field={field} course={course} onCourseChange={setCourse}
           target={navTarget} onTargetChange={setNavTarget} />}
       </div>
+      {showWorld && <Suspense fallback={<div className="earth-picker" role="status">Dünya haritası açılıyor…</div>}>
+        <WorldPicker initial={world?.terrain.point} onClose={closeWorld} onLaunch={launchWorld} />
+      </Suspense>}
     </section>
     <section className="academy" aria-labelledby="school-title">
       <div className="school-card">

@@ -9,6 +9,9 @@ FlightSimRC özgün kaynak kodu kökteki MIT lisansı altında yayımlanır. Aş
 | Three.js | 0.180.0 | MIT |
 | React Three Fiber | 9.8.2 | MIT |
 | Supabase JS | 2.119.0 | MIT |
+| MapLibre GL JS | 6.19.0 | BSD-3-Clause |
+| @mapbox/vector-tile | 3.0.0 | BSD-3-Clause |
+| pbf | 5.2.0 | BSD-3-Clause |
 
 Bu liste transitif bağımlılıkların tümünü kapsamaz. Dağıtımda `package-lock.json` ve her paketin lisans metni esas alınır. `Supabase JS` şimdilik kodda kullanılmaz; canlı bağlantı kurulduğunda etkinleştirilecektir.
 
@@ -26,3 +29,9 @@ Dosyalar `public/textures/` altında tutulur. Uçak ve saha geometrisi proje iç
 
 - Hava fotoğrafı `public/terrain/chatfield-naip.jpg` için USDA NAIP doğal renkli ortofoto, USGS The National Map Imagery Only servisi üzerinden alınmıştır. Colorado’daki bu kapsama kamu malıdır. [USGS NAIP veri kaydı](https://doi.org/10.5066/F7QN651G)
 - `src/sim/chatfield-data.ts` için USGS 3DEP yükseklik verisi kullanılmıştır. Örnekler 129 × 129 ızgarada, pist referansına göre desimetreye yuvarlanarak saklanır. [USGS 3DEP yükseklik servisi](https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer)
+
+## Dünya Keşfi veri servisleri
+
+- EOxCloudless by EOX IT Services GmbH, modified Copernicus Sentinel data 2016. [CC BY 4.0 ve servis şartları](https://cloudless.eox.at/documentation/license)
+- Mapzen/AWS Terrain Tiles sayısal yükseklik. [Terrain Tiles kaynak atıfları](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)
+- Bina ayak izleri ve yükseklikleri OpenFreeMap üzerinden alınır. [OpenFreeMap](https://openfreemap.org/) · [OpenMapTiles](https://openmaptiles.org/) · [OpenStreetMap katkıcıları](https://www.openstreetmap.org/copyright)

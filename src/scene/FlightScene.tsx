@@ -9,8 +9,10 @@ import { Airfield } from './Airfield'
 import { VehicleModel } from './Vehicles'
 import { RemoteAircraft } from './RemoteAircraft'
 import { chaseFraming } from './cameraFraming'
+import { EarthTerrain } from './EarthTerrain'
+import type { WorldTerrain } from '../sim/worldTerrain'
 
-export type CameraMode = 'chase' | 'pilot' | 'onboard' | 'overview'
+export type CameraMode = 'chase' | 'pilot' | 'onboard' | 'overview' | 'inspect'
 function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; cameraMode: CameraMode; zoom: number; vehicle: string; field: Field }) {
   const ref = useRef<THREE.Group>(null)
   const vectors = useMemo(() => ({
@@ -33,7 +35,11 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
     forward.set(0, 0, 1).applyEuler(attitude)
     if (cameraMode === 'pilot') desired.set(...pilot)
     else if (cameraMode === 'onboard') desired.set(0, .2, aircraft.visual.noseLength + .12).applyEuler(attitude).add(ref.current.position)
-    else if (cameraMode === 'overview') desired.set(s.position[0], s.position[1] + 150 * zoom, s.position[2] - 5)
+    else if (cameraMode === 'overview') desired.set(s.position[0], s.position[1] + (field.runway.length ? 150 : 800) * zoom, s.position[2] - 5)
+    else if (cameraMode === 'inspect') {
+      desired.set(chaseDistance * .73, chaseDistance * .42, chaseDistance * .76).applyAxisAngle(camera.up.set(0, 1, 0), s.yaw).add(ref.current.position)
+      desired.y = Math.max(desired.y, field.height(desired.x, -desired.z) + .2)
+    }
     else {
       desired.set(s.position[0] - Math.sin(s.yaw) * chaseDistance, s.position[1] + chaseHeight, s.position[2] - Math.cos(s.yaw) * chaseDistance)
       desired.y = Math.max(desired.y, field.height(desired.x, -desired.z) + .38, field.waterLevel + .38)
@@ -59,9 +65,16 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
   })
   return <group ref={ref}>{cameraMode !== 'onboard' && <VehicleModel kind={vehicle} controls={controls} state={state} />}</group>
 }
-export default function FlightScene({ state, controls, field, cameraMode, zoom, vehicle, peers }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; field: Field; cameraMode: CameraMode; zoom: number; vehicle: string; peers: RemotePilot[] }) {
-  return <Canvas camera={{ position: [0, 1.4, -4], fov: 58, near: .025, far: 2000 }} dpr={[1, 1.5]} shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>
-    <Airfield field={field} /><Aircraft state={state} controls={controls} cameraMode={cameraMode} zoom={zoom} vehicle={vehicle} field={field} />
+export default function FlightScene({ state, controls, field, cameraMode, zoom, vehicle, peers, world, onImagery }: {
+  state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; field: Field; cameraMode: CameraMode;
+  zoom: number; vehicle: string; peers: RemotePilot[]; world?: WorldTerrain;
+  onImagery: (state: 'loading' | 'ready' | 'unavailable') => void;
+}) {
+  return <Canvas key={world ? [world.point.longitude, world.point.latitude].join(',') : 'practice'}
+    camera={{ position: world ? [0, 140, -4] : [0, 1.4, -4], fov: 58, near: .025, far: world ? 62000 : 2000 }}
+    dpr={[1, 1.5]} shadows={!world} gl={{ antialias: true, logarithmicDepthBuffer: Boolean(world), toneMapping: THREE.ACESFilmicToneMapping }}>
+    {world ? <EarthTerrain key={field.id} world={world} flight={state} onImagery={onImagery} /> : <Airfield field={field} />}
+    <Aircraft state={state} controls={controls} cameraMode={cameraMode} zoom={zoom} vehicle={vehicle} field={field} />
     {peers.map(pilot => <RemoteAircraft key={pilot.id} pilot={pilot} />)}
   </Canvas>
 }

@@ -63,23 +63,7 @@ main{display:flex;flex-direction:column}header{order:0}.sim{order:1;margin-top:2
 }
 .lesson-progress span, .lesson-progress small { color: #d2e1e0; font-size: .83rem; }
 .lesson-progress progress { width: 100%; height: 8px; accent-color: #f1844b; }
-.field-map {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  width: 124px;
-  aspect-ratio: 1;
-  border: 1px solid #aec5bf9c;
-  border-radius: 4px;
-  background-color: #102027df;
-  background-image: linear-gradient(#a4c5b421 1px, transparent 1px), linear-gradient(90deg, #a4c5b421 1px, transparent 1px);
-  background-size: 25% 25%;
-  pointer-events: none;
-}
-.map-north, .map-scale { position: absolute; color: #e5ebe6; font-size: .7rem; }
 .attitude { top: 154px; }
-.map-north { top: 4px; left: 6px; }
-.map-scale { bottom: 4px; right: 6px; }
 .map-runway {
   position: absolute;
   left: 50%;
@@ -117,7 +101,6 @@ main{display:flex;flex-direction:column}header{order:0}.sim{order:1;margin-top:2
   .academy { grid-template-columns: 1fr; gap: 12px; }
   .school-card, .hangar-card { padding: 17px; }
   .lesson-progress { right: 8px; bottom: 66px; max-width: min(66%, 240px); }
-  .field-map { top: 8px; right: 8px; width: 76px; }
   .attitude { top: 92px; }
 }
 
@@ -303,24 +286,6 @@ body {
 .toolbar .deck-toggle:hover { border-color: var(--deck-teal); background: #245c4f; color: white; }
 .toolbar .assist-choice { flex: 1 1 170px; }
 .toolbar .assist-choice select { width: 100%; }
-.field-map {
-  width: 148px;
-  border: 1px solid #7aa3a8a8;
-  border-radius: 9px;
-  overflow: hidden;
-  box-shadow: 0 7px 28px #0310178c;
-}
-.field-route { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.map-waypoint {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 2px solid #baffed;
-  border-radius: 100%;
-  transform: translate(-50%, -50%);
-  background: #297762;
-  box-shadow: 0 0 0 3px #61d9b14a, 0 0 16px #68ffe2;
-}
 
 /* Flight-first layout: aircraft/runway visibility always outranks instrument cards. */
 main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
@@ -335,7 +300,6 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
 .toolbar .assist-choice { flex-basis: 185px; }
 .toolbar > div { flex-basis: auto; justify-content: flex-end; }
 .toolbar > div button { padding: 8px 11px; }
-.field-map { width: 112px; top: 12px; right: 12px; }
 .attitude { top: 134px; right: 12px; }
 .scene-label { top: 12px; left: 12px; padding: 8px 10px; }
 .hud { left: 12px; bottom: 12px; }
@@ -345,7 +309,6 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
 @media (max-width: 780px) {
   .viewport { height: 73vh; height: 73svh; min-height: 420px; max-height: 780px; }
   .simtop { padding: 9px 12px; }
-  .field-map { top: 8px; right: 8px; width: 88px; }
   .attitude { top: 106px; right: 8px; }
   .hud { bottom: 7px; left: 7px; gap: 3px; }
   .hud div { min-width: 60px; padding: 5px 6px; }
@@ -395,8 +358,62 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
 .flight-navigation small { color: #b4c7cf; }
 .toolbar > .configuration-controls { align-items: center; justify-content: flex-start; flex: 1 1 100%; }
 .toolbar .configuration-controls label { flex: 0 1 270px; }
-.field-map { border-radius: 50%; overflow: hidden; }
-.field-map .map-north { top: 5px; left: 50%; transform: translateX(-50%); }
-.field-map .map-scale { right: 50%; bottom: 6px; transform: translateX(50%); white-space: nowrap; }
 .simtop { gap: 8px; flex-wrap: wrap; }
 .lesson-progress { z-index: 1; }
+
+.simtop .earth-launch {
+  color: #162a32;
+  background: #8bd9c4;
+  border: 1px solid #8bd9c4;
+  padding: 7px 11px;
+  border-radius: 5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.simtop .earth-launch:hover { background: #b0eddb; }
+.simtop .earth-launch:disabled { opacity: .55; cursor: default; }
+.earth-picker {
+  width: min(1000px, calc(100vw - 30px));
+  max-width: none;
+  max-height: min(92dvh, 920px);
+  overflow: auto;
+  border: 1px solid #52717c;
+  border-radius: 14px;
+  padding: 0;
+  background: #102630;
+  color: #edf6f3;
+  box-shadow: 0 18px 100px #020b13b3;
+}
+.earth-picker::backdrop { background: #030b13c7; }
+.earth-toolbar, .earth-form { padding: 12px clamp(12px, 3vw, 22px); }
+.earth-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.earth-toolbar h2, .earth-toolbar p { margin: 0; }
+.earth-toolbar p { color: #a8bec4; font-size: .87rem; margin-top: 5px; }
+.earth-globe { height: clamp(210px, 53dvh, 560px); background: #182f45; }
+.earth-picker button, .earth-picker input { padding: 7px 11px; border-radius: 5px; color: #edf6f3; background: #203b46; border: 1px solid #597381; }
+.earth-picker .maplibregl-ctrl button { padding: 0; border: none; background: #fff; }
+.earth-form form, .earth-presets { display: flex; flex-wrap: wrap; align-items: end; gap: 7px; margin-bottom: 8px; }
+.earth-form label { display: grid; gap: 5px; flex: 0 1 135px; min-width: 0; color: #a8bec4; font-size: .81rem; }
+.earth-form input { min-width: 0; width: 100%; }
+.earth-form button[type="submit"] { border-color: #8bd9c4; color: #162a32; background: #8bd9c4; font-weight: 700; }
+.earth-form button:disabled { opacity: .6; }
+.earth-form small { display: block; color: #ffcc9f; margin-bottom: 6px; }
+.earth-form a, .earth-credit a { color: #a7c8cd; font-size: .72rem; }
+.toolbar > .earth-credit { display: flex; flex: 1 1 100%; justify-content: flex-start; letter-spacing: 0; }
+.earth-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: #e1edf1;
+  background: #142733d9;
+  padding: 7px 10px;
+  font-size: .75rem;
+}
+@media (max-width: 580px) {
+  .simtop { flex-wrap: wrap; gap: 5px; }
+  .simtop .flight-status { width: 100%; }
+  .earth-picker { width: calc(100vw - 16px); }
+  .earth-form label { flex: 1 1 100px; }
+  .earth-form button[type="submit"] { flex: 1 0 100%; }
+  .earth-status { top: 59px; }
+}

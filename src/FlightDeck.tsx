@@ -18,14 +18,14 @@ export function FlightNavigation({ flight, field, course, target, onCourseChange
   return <details className="flight-navigation">
     <summary>HSI rota · {fmt3(nav.course)}°</summary>
     <div className="flight-navigation-controls">
-      <label>Hedef
+      {field.runway.length > 0 && <label>Hedef
         <select value={target} onChange={event => onTargetChange(event.target.value as NavTarget)}>
           <option value="runway">Pist merkezi</option>
           <option value="approach">Yaklaşma noktası</option>
         </select>
-      </label>
+      </label>}
       <button type="button" title="Rotayı 5° azalt" onClick={() => onCourseChange(wrapHeading(course - 5))}>−5°</button>
-      <button type="button" title="Pist doğrultusu" onClick={() => onCourseChange(wrapHeading(field.runway.heading))}>RWY</button>
+      {field.runway.length > 0 && <button type="button" title="Pist doğrultusu" onClick={() => onCourseChange(wrapHeading(field.runway.heading))}>RWY</button>}
       <button type="button" title="Hedefe doğrudan rota" onClick={() => onCourseChange(nav.bearing)}>DCT</button>
       <button type="button" title="Rotayı 5° artır" onClick={() => onCourseChange(wrapHeading(course + 5))}>+5°</button>
     </div>

@@ -34,6 +34,7 @@ export type NavigationReadout = {
 export function localWaypoint(field: Field, target: NavTarget): LocalWaypoint {
   const { center, heading, length } = field.runway
   const cx = center[0], cz = -center[1]
+  if (!length) return { x: cx, z: cz, label: 'BAŞLANGIÇ NOKTASI' }
   if (target === 'runway') return { x: cx, z: cz, label: 'PİST MERKEZİ' }
   const offset = length / 2 + 220
   return {

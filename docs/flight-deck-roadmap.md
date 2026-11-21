@@ -2,11 +2,25 @@
 
 This iteration preserves the working RadioLink T12D Gamepad/WebHID input, calibration-free flight, and reverse-switch settings.
 
+## World exploration
+
+Open **Dünya haritası**, pick a point on the globe or enter latitude and longitude, then choose **Burada uç**. The RC aircraft starts 150 m above local terrain. World flight works in solo mode. Selecting an education field or starting a lesson returns to the existing airfield system. The HSI's direct-to target is the start coordinates in world mode.
+
+The globe uses MapLibre GL JS and the EOX Sentinel‑2 Cloudless 2016 raster tiles. The 3D flight view streams the same raster imagery with 3D relief from the Mapzen/AWS Terrarium DEM. A distance-based tile tree uses a tighter mesh and satellite tiles up to z14 around the aircraft and lower levels toward the horizon. Ground contact and the camera use the same elevation source. OpenFreeMap vector tiles provide nearby OpenStreetMap building footprints and approximate heights. Building geometry is for display. This is a local metric approximation of Web Mercator around the launch point, with selectable coordinates between approximately ±85° latitude.
+
+The 2016 Sentinel mosaic has roughly 10 m source imagery. Land cover and building models depend on data coverage, and detailed photogrammetry is outside this dataset. All services are accessed on demand and need an internet connection.
+
+The fixed-wing models use aircraft-specific fuselage cross-sections, swept tail meshes, fitted canopies and independent hinged surfaces. The Viper includes intake and exhaust geometry, the T‑28 has a radial cowling and a three-blade propeller. Select **Model inceleme** in **Görüş** for a close three-quarter view. Aerodynamic and controller settings are shared with the existing aircraft.
+
+- [EOxCloudless data and license](https://cloudless.eox.at/documentation/license)
+- [Mapzen/AWS elevation data and attribution](https://registry.opendata.aws/terrain-tiles/)
+- [OpenFreeMap](https://openfreemap.org/quick_start/) and [OpenMapTiles building schema](https://openmaptiles.org/docs/schema/#building)
+- [Horizon Hobby Viper 90 mm product reference](https://www.horizonhobby.com/product/viper-90mm-edf-jet-bnf-basic-with-as3x-and-safe-select/EFL17750.html)
+
 ## Implemented
 
 - **ADI / attitude director-style display:** Roll/bank and pitch are rendered from the actual six-degree-of-freedom simulation attitude. Speed, altitude above local terrain and vertical speed are shown alongside it. There is no autopilot flight director command bar yet.
 - **HSI / local navigation:** Rotating heading card, true bearing-to-fix pointer, manually selectable course, cross-track CDI, TO/FROM indicator, ground track, distance and closing-speed ETA. Course controls include ±5°, runway course (RWY) and direct-to the selected fix (DCT).
-- **Tactical map:** Scales to show the aircraft and the selected local waypoint, with a line between them.
 - **Waypoints:** Two **local simulator** fixes per airfield: runway centre and an approach waypoint 220 m before the runway threshold. No live GNSS, published ILS, certified radio beacon, airport database or geographic georeferencing is claimed.
 - **Selectable flight-assist modes:** Model-specific defaults, student/SAFE, sport, manual/ACRO and wind-free studio (from existing simulation physics).
 - **Procedural audio:** Separate prop/rotor/EDF harmonics, blade pulses, turbine tones and speed-dependent wind, driven by throttle, simulated RPM and airspeed. Synthesized locally with WebAudio.
@@ -27,7 +41,7 @@ Flight state uses local simulation metres. The display bridge mirrors physics Z 
 
 ## Next iterations for a world-scale competitor
 
-1. **Georeferenced world:** Choose a licensed terrain / imagery / vector-tile / elevation provider, respect its map attribution and API quotas, and build a terrain tile streamer with LOD/caching and a world-coordinate origin.
+1. **Georeferenced world:** Add a global position reference suitable for very long flights and support finer-resolution licensed imagery where available.
 2. **Genuine nav database:** Add licensed/open aviation waypoints, airport data and nav procedures with updates. Separate magnetic from true bearings; implement flight plans, waypoint sequencing and magnetic variation.
 3. **Terrain & world fidelity:** Buildings, water, roads, ground materials, runway lighting and weather layers with performance budgets for mid-range mobile/desktop hardware.
 4. **Flight dynamics:** Model-specific inertia, aerodynamic tuning, mass / battery / fuel, wind/turbulence presets and comparison tests against published reference values where available.

@@ -67,7 +67,7 @@ export function applyAssists(spec: AircraftSpec, state: SimState, raw: Controls,
 
 export type SimulationOptions = {
   aircraft?: string
-  field?: string
+  field?: string | Field
   assists?: Partial<FlightAssistSettings>
   weather?: Partial<WeatherConfig>
   airborne?: { altitude: number; airspeed: number; offset?: number }
@@ -91,7 +91,7 @@ export class Simulation {
 
   constructor(options: SimulationOptions = {}) {
     this.spec = aircraftById(options.aircraft ?? 'trainer1500')
-    this.field = fieldById(options.field ?? 'anadolu')
+    this.field = typeof options.field === 'object' ? options.field : fieldById(options.field ?? 'anadolu')
     this.assists = { ...this.spec.assists, ...options.assists }
     this.weather = { ...this.field.weather, ...options.weather }
     this.env = this.buildEnvironment(0)
@@ -138,7 +138,10 @@ export class Simulation {
 
   reset(options: SimulationOptions = {}) {
     if (options.aircraft) { this.spec = aircraftById(options.aircraft); this.assists = { ...this.spec.assists } }
-    if (options.field) { this.field = fieldById(options.field); this.weather = { ...this.field.weather, ...options.weather } }
+    if (options.field) {
+      this.field = typeof options.field === 'object' ? options.field : fieldById(options.field)
+      this.weather = { ...this.field.weather, ...options.weather }
+    }
     if (options.assists) this.assists = { ...this.spec.assists, ...options.assists }
     if (options.weather) this.weather = { ...this.weather, ...options.weather }
     this.state = this.spawn(options.airborne)
