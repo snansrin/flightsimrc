@@ -225,18 +225,22 @@ export function Airfield({ field }: { field: Field }) {
         <mesh position={[0, .013, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
           <planeGeometry args={[runway.width, runway.length]} />
           <meshStandardMaterial map={grassStrip || field.orthophoto ? null : road} normalMap={grassStrip ? null : roadNormal}
-            color={field.orthophoto ? '#505457' : grassStrip ? '#6d8a4a' : runway.surface === 'concrete' ? '#c6bca7' : '#bcbcc0'} roughness={.88} />
+            color={field.orthophoto ? '#505457' : grassStrip ? '#6d8a4a' : runway.surface === 'concrete' ? '#c6bca7' : '#bcbcc0'}
+            roughness={.88} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-3} />
         </mesh>
         {[-1, 1].map(side => <mesh key={side} position={[side * runway.width * .47, .025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[.08, runway.length - 2]} /><meshStandardMaterial color="#f1ecda" />
+          <planeGeometry args={[.08, runway.length - 2]} />
+          <meshStandardMaterial color="#f1ecda" polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-6} />
         </mesh>)}
         {Array.from({ length: markings }, (_, index) => <mesh key={index}
           position={[0, .028, (index - (markings - 1) / 2) * 8]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[.14, 3.2]} /><meshStandardMaterial color="#eee9d8" />
+          <planeGeometry args={[.14, 3.2]} />
+          <meshStandardMaterial color="#eee9d8" polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-6} />
         </mesh>)}
         {[-1, 1].flatMap(end => [-.33, -.21, .21, .33].map(fraction => <mesh key={`${end}:${fraction}`}
           position={[fraction * runway.width, .026, end * (runway.length / 2 - 3)]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[.29, 2.2]} /><meshStandardMaterial color="#f2edde" />
+          <planeGeometry args={[.29, 2.2]} />
+          <meshStandardMaterial color="#f2edde" polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-6} />
         </mesh>))}
       </>}
     </group>

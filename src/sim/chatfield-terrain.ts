@@ -16,7 +16,7 @@ export function chatfieldHeight(x: number, z: number): number {
   const north = heightAt(col, row) * (1 - tx) + heightAt(col + 1, row) * tx
   const south = heightAt(col, row + 1) * (1 - tx) + heightAt(col + 1, row + 1) * tx
   const [cx, cz] = chatfieldRunwayCenter
-  // Grade just the primary pavement. The survey is too coarse to resolve its crown.
-  const grade = Math.max(smoothstep(105, 139, Math.abs(x - cx)), smoothstep(8, 24, Math.abs(z - cz)))
+  // The graded apron includes adjacent mesh samples so they cannot cross the pavement.
+  const grade = Math.max(smoothstep(123, 152, Math.abs(x - cx)), smoothstep(27, 43, Math.abs(z - cz)))
   return (north * (1 - tz) + south * tz) * grade
 }

@@ -49,7 +49,12 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
     }
     if (camera instanceof THREE.PerspectiveCamera) {
       const fov = cameraMode === 'pilot' ? 58 / zoom : cameraMode === 'onboard' ? THREE.MathUtils.clamp(75 / zoom, 40, 100) : chase.fov
-      if (Math.abs(camera.fov - fov) > .01) { camera.fov = fov; camera.updateProjectionMatrix() }
+      const near = cameraMode === 'overview' ? 1 : .025
+      if (camera.near !== near || Math.abs(camera.fov - fov) > .01) {
+        camera.near = near
+        camera.fov = fov
+        camera.updateProjectionMatrix()
+      }
     }
   })
   return <group ref={ref}>{cameraMode !== 'onboard' && <VehicleModel kind={vehicle} controls={controls} state={state} />}</group>

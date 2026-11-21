@@ -87,6 +87,7 @@ describe('legacy scene and modern physics bridge', () => {
     expect(sim.headingDegrees).toBeCloseTo(90)
     const [x, y, z] = sim.state.position
     expect(sim.field.height(x, z)).toBeCloseTo(0)
+    expect(sim.field.height(sim.field.runway.center[0] + 119, sim.field.runway.center[1] + 24)).toBeCloseTo(0)
     expect(y).toBeGreaterThan(0)
     expect(sim.env.density).toBeLessThan(1.1)
     expect(sim.field.height(-800, -700)).toBeLessThan(-5)
