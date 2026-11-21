@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
-import type { Field } from '../sim/fields'
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js'
+import { airfieldPilotPosition, type Field } from '../sim/fields'
 import { windVector } from '../sim/atmosphere'
 
 const palettes: Record<Field['biome'], { ground: string; sky: string; foliage: string }> = {
@@ -26,9 +26,11 @@ function prepareTexture(texture: THREE.Texture, repeatX: number, repeatY: number
 }
 
 function terrainMesh(field: Field) {
-  const geometry = new THREE.PlaneGeometry(1600, 1600, 160, 160)
+  const width = field.orthophoto?.width ?? 1600
+  const geometry = new THREE.PlaneGeometry(width, width, 160, 160)
   geometry.rotateX(-Math.PI / 2)
   const points = geometry.getAttribute('position')
+  const uv = geometry.getAttribute('uv')
   const tint = new Float32Array(points.count * 3)
   const color = new THREE.Color()
   const palette = palettes[field.biome]
@@ -36,6 +38,7 @@ function terrainMesh(field: Field) {
     const x = points.getX(i), z = points.getZ(i)
     const height = field.height(x, -z)
     points.setY(i, height)
+    if (field.orthophoto) uv.setY(i, 1 - uv.getY(i))
     const detail = Math.sin(x * .091) * Math.cos(z * .069)
     color.set(palette.ground).multiplyScalar(.86 + .13 * detail)
     if (field.biome === 'alpine' && height > 50) color.lerp(new THREE.Color('#e1ebed'), Math.min(1, (height - 50) / 40))
@@ -45,6 +48,28 @@ function terrainMesh(field: Field) {
   geometry.setAttribute('color', new THREE.BufferAttribute(tint, 3))
   geometry.computeVertexNormals()
   return geometry
+}
+
+function OrthophotoTerrain({ geometry, file }: { geometry: THREE.BufferGeometry; file: string }) {
+  const map = useLoader(THREE.TextureLoader, `${import.meta.env.BASE_URL}terrain/${file}`)
+  map.colorSpace = THREE.SRGBColorSpace
+  map.anisotropy = 8
+  return <mesh geometry={geometry} receiveShadow>
+    <meshStandardMaterial map={map} color="#d7d9d5" roughness={.96} />
+  </mesh>
+}
+
+function ChatfieldPavilion({ field }: { field: Field }) {
+  const [x, z] = [field.runway.center[0] + 8, field.runway.center[1] + 63]
+  return <group position={[x, field.height(x, z), -z]}>
+    <mesh position={[0, .04, 0]} receiveShadow><boxGeometry args={[10, .08, 6]} /><meshStandardMaterial color="#a1a096" /></mesh>
+    {[-4.4, 4.4].flatMap(side => [-2.5, 2.5].map(offset => <mesh key={`${side}:${offset}`} position={[side, 1.34, offset]} castShadow>
+      <boxGeometry args={[.14, 2.68, .14]} /><meshStandardMaterial color="#726250" />
+    </mesh>))}
+    {[-1, 1].map(sign => <mesh key={sign} position={[0, 2.91, sign * 1.62]} rotation={[sign * .18, 0, 0]} castShadow>
+      <boxGeometry args={[10.6, .13, 3.3]} /><meshStandardMaterial color="#52635a" roughness={.76} metalness={.25} />
+    </mesh>)}
+  </group>
 }
 
 function FieldScenery({ field }: { field: Field }) {
@@ -104,16 +129,6 @@ function FieldScenery({ field }: { field: Field }) {
       <boxGeometry args={[1, 1, 1]} /><meshStandardMaterial roughness={.76} />
     </instancedMesh>}
   </>
-}
-
-export function airfieldPilotPosition(field: Field): [number, number, number] {
-  const { center, heading, width, length } = field.runway
-  const angle = THREE.MathUtils.degToRad(heading)
-  const lateral = width / 2 + 7
-  const back = length * .3
-  const x = center[0] + Math.cos(angle) * lateral - Math.sin(angle) * back
-  const z = -center[1] - Math.sin(angle) * lateral - Math.cos(angle) * back
-  return [x, Math.max(field.height(x, -z), field.waterLevel) + 1.7, z]
 }
 
 function Windsock({ field }: { field: Field }) {
@@ -181,7 +196,7 @@ function WaterSurface({ field }: { field: Field }) {
 export function Airfield({ field }: { field: Field }) {
   const asset = (name: string) => `${import.meta.env.BASE_URL}textures/${name}`
   const maps = useLoader(THREE.TextureLoader, [asset('grass001-color.jpg'), asset('road001-color.jpg'), asset('road001-normalgl.jpg')])
-  const sky = useLoader(RGBELoader, asset('farm-field-sky-1k.hdr'))
+  const sky = useLoader(HDRLoader, asset('farm-field-sky-1k.hdr'))
   const [grass, road, roadNormal] = useMemo(() => maps.map((map, i) => prepareTexture(map, i === 0 ? 250 : 1, i === 0 ? 250 : 12, i < 2)), [maps])
   const terrain = useMemo(() => terrainMesh(field), [field])
   useEffect(() => () => terrain.dispose(), [terrain])
@@ -193,11 +208,14 @@ export function Airfield({ field }: { field: Field }) {
   const grassStrip = runway.surface === 'grass'
   return <>
     <primitive attach="background" object={sky} />
-    <fog attach="fog" args={[palettes[field.biome].sky, 185, 710]} />
+    <fog attach="fog" args={[palettes[field.biome].sky, field.orthophoto ? 760 : 185, field.orthophoto ? 1530 : 710]} />
     <hemisphereLight args={['#ecf7ff', '#67735b', 1.65]} />
     <directionalLight position={[25, 35, -35]} intensity={2.35} castShadow shadow-mapSize={[2048, 2048]}
       shadow-camera-left={-75} shadow-camera-right={75} shadow-camera-top={75} shadow-camera-bottom={-75} shadow-bias={-.0001} />
-    <mesh geometry={terrain} receiveShadow><meshStandardMaterial vertexColors map={field.biome === 'snow' ? null : grass} roughness={.99} /></mesh>
+    {field.orthophoto ? <>
+      <OrthophotoTerrain geometry={terrain} file={field.orthophoto.file} />
+      <ChatfieldPavilion field={field} />
+    </> : <mesh geometry={terrain} receiveShadow><meshStandardMaterial vertexColors map={field.biome === 'snow' ? null : grass} roughness={.99} /></mesh>}
     {water && <WaterSurface field={field} />}
     <group position={[runway.center[0], runway.elevation, -runway.center[1]]} rotation={[0, THREE.MathUtils.degToRad(runway.heading), 0]}>
       {runway.surface === 'water' ? [-1, 1].flatMap(side => [-.43, -.22, 0, .22, .43].map(fraction =>
@@ -206,8 +224,8 @@ export function Airfield({ field }: { field: Field }) {
         </mesh>)) : <>
         <mesh position={[0, .013, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
           <planeGeometry args={[runway.width, runway.length]} />
-          <meshStandardMaterial map={grassStrip ? null : road} normalMap={grassStrip ? null : roadNormal}
-            color={grassStrip ? '#6d8a4a' : runway.surface === 'concrete' ? '#c6bca7' : '#bcbcc0'} roughness={.88} />
+          <meshStandardMaterial map={grassStrip || field.orthophoto ? null : road} normalMap={grassStrip ? null : roadNormal}
+            color={field.orthophoto ? '#505457' : grassStrip ? '#6d8a4a' : runway.surface === 'concrete' ? '#c6bca7' : '#bcbcc0'} roughness={.88} />
         </mesh>
         {[-1, 1].map(side => <mesh key={side} position={[side * runway.width * .47, .025, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[.08, runway.length - 2]} /><meshStandardMaterial color="#f1ecda" />
@@ -223,6 +241,6 @@ export function Airfield({ field }: { field: Field }) {
       </>}
     </group>
     <Windsock field={field} />
-    <FieldScenery field={field} />
+    {!field.orthophoto && <FieldScenery field={field} />}
   </>
 }

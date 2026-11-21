@@ -11,11 +11,17 @@ This iteration preserves the working RadioLink T12D Gamepad/WebHID input, calibr
 - **Selectable flight-assist modes:** Model-specific defaults, student/SAFE, sport, manual/ACRO and wind-free studio (from existing simulation physics).
 - **Procedural audio:** Separate prop/rotor/EDF harmonics, blade pulses, turbine tones and speed-dependent wind, driven by throttle, simulated RPM and airspeed. Synthesized locally with WebAudio.
 - **Model refinement:** Drone/heli/EDF procedural meshes use refined surface materials and navigation light accents. No third-party asset copies.
-- **Responsive cockpit UI:** A collapsible instrument panel under the 3D viewport, with large readable labels and interactive course controls.
+- **Responsive cockpit UI:** Three circular instruments inside the viewport. The course and waypoint controls remain in a separate section of the toolbar.
+
+## Chatfield and RC systems
+
+- The public [World Flight Sim Explore](https://worldflightsim.com/explore/) experience informed the location and camera workflow. FlightSimRC adds a standalone local scene using the [USDA NAIP orthoimage](https://doi.org/10.5066/F7QN651G) and [USGS 3DEP elevation](https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer) for Chatfield Aerodrome. Coverage is 2.7 × 2.7 km around 39.53230° N, 105.06042° W. The image is 2048 × 2048 pixels and the elevation grid is 129 × 129, about 21 m between samples. The simulated eastbound runway uses the club’s published 688 ft length. Its width and center are approximated from the orthoimage, and the local atmospheric datum is 1683.6 m. [Jeffco Aeromod’lers field](https://jeffcoaeromodlers.com/club-info/flying-field/)
+- T-28 and Viper accept clean, approach and landing flap configurations. The T-28 stages are 0°, 21° and 42°, with deployment allowed up to 20 m/s in the simulator. Viper stages are 0°, 19° and 38°, up to 27 m/s. Both use a 0.24 s actuator time constant and their configured retractable gear. These are simulation parameters. [FAA flaps and landing configurations](https://www.faa.gov/sites/faa.gov/files/regulations_policies/handbooks_manuals/aviation/airplane_handbook/10_afh_ch9.pdf)
+- The sound layers use estimated blade passage frequency from blade count and simulated RPM. The ground pilot view applies distance attenuation and a Doppler shift from radial velocity. The sound is synthesized with Web Audio. [FHWA aircraft noise fundamentals](https://www.fhwa.dot.gov/Environment/noise/regulations_and_guidance/predictionabatement.pdf)
 
 ## Validity and conventions
 
-All coordinates are **local simulation metres**, not latitude/longitude. The display bridge mirrors physics Z to match the scene renderer. Heading zero is simulator north (+Z in display space), 90° points east (+X). Bearing and course use these display coordinates. Cross-track is the perpendicular displacement from a line through the selected local waypoint at the selected course (40 m per CDI dot). ETA uses positive **closing speed** along the vector to the fix; otherwise no ETA is displayed.
+Flight state uses local simulation metres. The display bridge mirrors physics Z to match the scene renderer. Heading zero is simulator north (+Z in display space), 90° points east (+X). Bearing and course use these display coordinates. Cross-track is the perpendicular displacement from a line through the selected local waypoint at the selected course (40 m per CDI dot). ETA uses positive closing speed along the vector to the fix.
 
 **Not for flight training, operational navigation, flight planning or safety decisions.** The ADI/HSI follow simulated data, not real-world sensor feeds.
 

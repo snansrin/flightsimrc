@@ -4,8 +4,6 @@ import * as THREE from 'three'
 import type { Controls, FlightState } from '../flight'
 import type { AircraftSpec } from '../sim/types'
 
-type Point = [number, number, number]
-
 function wingGeometry(span: number, chord: number, taper: number, sweep: number, dihedral: number) {
   const vertices: number[] = [], indices: number[] = []
   const samples = 24
@@ -40,6 +38,7 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
   const blur = useRef<THREE.MeshBasicMaterial>(null)
   const blades = useRef<THREE.Mesh>(null)
   const surfaces = useRef<(THREE.Group | null)[]>([])
+  const flaps = useRef<(THREE.Group | null)[]>([])
   const tailControls = useRef(new Map<string, THREE.Group>())
   const wheels = useRef(new Map<string, THREE.Group>())
   const tails = useMemo(() => spec.surfaces.filter(surface => surface.kind === 'htail' || surface.kind === 'vtail'), [spec])
@@ -49,6 +48,16 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
     return wingGeometry(spec.span / 2, spec.chord * 2 / (1 + visual.taper), visual.taper, angle(visual.sweep), angle(visual.dihedral))
   }, [spec, visual])
   useEffect(() => () => geometry.dispose(), [geometry])
+  const fuselage = useMemo(() => {
+    const length = visual.fuselageLength
+    const nose = visual.noseLength
+    const radius = visual.fuselageRadius
+    const isJet = spec.prop.kind === 'edf'
+    const profile = [[.18, 0], [.37, .08], [.66, .27], [.96, .48], [1, .65], [.94, .76], [.66, .9], [isJet ? .14 : .49, .99], [.015, 1]]
+    return new THREE.LatheGeometry(profile.map(([width, station]) =>
+      new THREE.Vector2(width * radius, nose + (station - 1) * length)), 36)
+  }, [spec, visual])
+  useEffect(() => () => fuselage.dispose(), [fuselage])
   useFrame((_, delta) => {
     const rpm = state?.current.engineSpeed ?? controls.current.throttle
     if (spinner.current) spinner.current.rotation.z += delta * Math.min(95, rpm * prop.maxRpm * Math.PI / 30)
@@ -59,6 +68,9 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
       const pitch = visual.layout === 'flying-wing' ? -controls.current.elevator : 0
       surface.rotation.x = (pitch + (index ? -1 : 1) * controls.current.aileron) * .42
     })
+    for (const flap of flaps.current) {
+      if (flap) flap.rotation.x = -(state?.current.flapPosition ?? 0) * THREE.MathUtils.degToRad(spec.flaps?.maxAngle ?? 0)
+    }
     for (const tail of tails) {
       const control = tailControls.current.get(tail.id)
       if (!control) continue
@@ -66,7 +78,12 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
     }
     for (const gear of retractable) {
       const pivot = wheels.current.get(gear.id)
-      if (pivot) pivot.rotation.z = (1 - (state?.current.gearPosition ?? 1)) * Math.PI / 2 * (gear.position[1] < 0 ? 1 : -1)
+      if (!pivot) continue
+      const extension = state?.current.gearPosition ?? 1
+      pivot.visible = extension > .035
+      const tuck = (1 - extension) * Math.PI / 2
+      if (Math.abs(gear.position[1]) < .02) pivot.rotation.x = tuck
+      else pivot.rotation.z = tuck * Math.sign(-gear.position[1])
     }
   })
   const radius = visual.fuselageRadius
@@ -75,14 +92,25 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
   const tail = nose - length
   const wingY = -visual.wingY
   const wingZ = -visual.wingZ
-  const bodyPosition: Point = [0, 0, nose - length / 2]
   const sweep = Math.tan(THREE.MathUtils.degToRad(visual.sweep))
   const dihedral = Math.tan(THREE.MathUtils.degToRad(visual.dihedral))
   const flapX = spec.span * .34
   return <group>
-    <mesh position={bodyPosition} scale={[radius, radius * .9, length * .50]} castShadow>
-      <sphereGeometry args={[1, 32, 16]} /><meshStandardMaterial color={visual.color} roughness={.43} />
+    <mesh geometry={fuselage} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, .88]} castShadow>
+      <meshPhysicalMaterial color={visual.color} roughness={.45} clearcoat={.27} clearcoatRoughness={.4} />
     </mesh>
+    {prop.kind === 'edf' && <>
+      {[-1, 1].map(side => <mesh key={side} position={[side * radius * .84, -radius * .14, nose * .38]}
+        scale={[radius * .2, radius * .39, length * .08]} rotation={[0, side * .38, 0]}>
+        <sphereGeometry args={[1, 16, 10]} /><meshStandardMaterial color={visual.trim} roughness={.82} />
+      </mesh>)}
+      <mesh position={[0, 0, tail + .01]} rotation={[0, Math.PI, 0]}>
+        <ringGeometry args={[prop.diameter * .32, prop.diameter * .48, 32]} /><meshStandardMaterial color="#687580" metalness={.67} roughness={.39} />
+      </mesh>
+      <mesh position={[0, 0, tail + .018]} rotation={[0, Math.PI, 0]}>
+        <circleGeometry args={[prop.diameter * .33, 32]} /><meshStandardMaterial color="#111b21" roughness={.94} />
+      </mesh>
+    </>}
     {visual.canopy !== 'none' && <mesh position={[0, radius * .6, nose * .24]} scale={[radius * .85, radius * .65, length * .19]}>
       <sphereGeometry args={[1, 24, 14]} /><meshPhysicalMaterial color={visual.trim} metalness={.3} roughness={.14} clearcoat={.85} />
     </mesh>}
@@ -106,6 +134,13 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
           <boxGeometry args={[spec.span * .25, .012, spec.chord * .13]} /><meshStandardMaterial color={visual.accent} />
         </mesh>
       </group>
+      {spec.flaps && <group position={[side * spec.span * .18, wingY + spec.span * .18 * dihedral,
+        wingZ - spec.span * .18 * sweep - spec.chord * .57]} ref={node => { flaps.current[index] = node }}>
+        <mesh position={[0, 0, -spec.chord * .095]} castShadow>
+          <boxGeometry args={[spec.span * .21, .009, spec.chord * .24]} />
+          <meshStandardMaterial color={visual.accent} metalness={.15} roughness={.46} />
+        </mesh>
+      </group>}
       <mesh position={[side * spec.span * .48, wingY + spec.span * .48 * dihedral + .007, wingZ - spec.span * .48 * sweep]}>
         <sphereGeometry args={[Math.max(.012, spec.chord * .069), 12, 8]} />
         <meshStandardMaterial color={visual.accent} roughness={.43} />

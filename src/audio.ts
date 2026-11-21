@@ -1,6 +1,26 @@
 import type { VehicleKind } from './vehicles'
+import type { FlightState } from './flight'
+import type { AircraftSpec } from './sim/types'
+import type { Vec3 } from './sim/math'
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+export function bladePassageFrequency(spec: AircraftSpec, power: number): number {
+  const rpm = clamp(Number.isFinite(power) ? power : 0, 0, 1)
+  if (spec.family === 'heli') return rpm * (spec.rotor?.headSpeed ?? 2200) * 2 / 60
+  if (spec.family === 'multirotor') return rpm * 16500 * Math.max(2, spec.visual.propBlades) / 60
+  if (spec.prop.kind === 'none') return 0
+  return rpm * spec.prop.maxRpm * (spec.prop.kind === 'edf' ? 11 : Math.max(2, spec.visual.propBlades)) / 60
+}
+
+export function soundPerspective(flight: Pick<FlightState, 'position' | 'velocity'>, listener?: Vec3) {
+  if (!listener) return { gain: 1, doppler: 1 }
+  const dx = flight.position[0] - listener[0], dy = flight.position[1] - listener[1], dz = flight.position[2] - listener[2]
+  const distance = Math.hypot(dx, dy, dz)
+  const [vx, vy, vz] = flight.velocity
+  const radial = distance > 1 ? (dx * vx + dy * vy + dz * vz) / distance : 0
+  return { gain: 1 / Math.hypot(1, distance / 14), doppler: 343 / (343 + clamp(radial, -95, 95)) }
+}
 
 export type EngineTimbre = {
   fundamental: number
@@ -116,21 +136,25 @@ export class EngineAudio {
 
   async resume() { await this.context.resume() }
 
-  update(kind: VehicleKind, throttle: number, airspeed: number, paused: boolean, rpm?: number) {
+  update(kind: VehicleKind, throttle: number, airspeed: number, paused: boolean, rpm?: number,
+    spec?: AircraftSpec, flight?: FlightState, listener?: Vec3) {
     const now = this.context.currentTime
     const t = engineTimbre(kind, throttle, airspeed, rpm)
-    this.prop.frequency.setTargetAtTime(t.fundamental, now, .1)
-    this.harmonic.frequency.setTargetAtTime(t.harmonic, now, .12)
-    this.blade.frequency.setTargetAtTime(t.blade, now, .1)
-    this.whine.frequency.setTargetAtTime(t.whine, now, .16)
-    this.propGain.gain.setTargetAtTime(t.tonalGain, now, .08)
-    this.harmonicGain.gain.setTargetAtTime(t.tonalGain * .26, now, .08)
-    this.bladeGain.gain.setTargetAtTime(t.bladeGain, now, .1)
-    this.whineGain.gain.setTargetAtTime(t.whineGain, now, .13)
+    const scope = flight ? soundPerspective(flight, listener) : { gain: 1, doppler: 1 }
+    const physicalBlade = spec ? bladePassageFrequency(spec, rpm ?? throttle) : t.blade
+    const engineLevel = spec ? clamp((rpm ?? throttle) * 2, 0, 1) : 1
+    this.prop.frequency.setTargetAtTime(t.fundamental * scope.doppler, now, .1)
+    this.harmonic.frequency.setTargetAtTime(t.harmonic * scope.doppler, now, .12)
+    this.blade.frequency.setTargetAtTime(clamp(physicalBlade * scope.doppler, 16, 8300), now, .1)
+    this.whine.frequency.setTargetAtTime(t.whine * scope.doppler, now, .16)
+    this.propGain.gain.setTargetAtTime(t.tonalGain * engineLevel, now, .08)
+    this.harmonicGain.gain.setTargetAtTime(t.tonalGain * .26 * engineLevel, now, .08)
+    this.bladeGain.gain.setTargetAtTime(t.bladeGain * engineLevel, now, .1)
+    this.whineGain.gain.setTargetAtTime(t.whineGain * engineLevel, now, .13)
     this.engineFilter.frequency.setTargetAtTime(t.noiseFilter, now, .12)
-    this.engineNoiseGain.gain.setTargetAtTime(t.engineNoise, now, .12)
+    this.engineNoiseGain.gain.setTargetAtTime(t.engineNoise * engineLevel, now, .12)
     this.windNoiseGain.gain.setTargetAtTime(t.windNoise, now, .18)
-    this.master.gain.setTargetAtTime(paused ? 0 : t.volume, now, paused ? .06 : .13)
+    this.master.gain.setTargetAtTime(paused ? 0 : t.volume * scope.gain, now, paused ? .06 : .13)
   }
 
   async close() { await this.context.close() }

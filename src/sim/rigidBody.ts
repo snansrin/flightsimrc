@@ -14,7 +14,7 @@ export type ForceModel = (state: SimState, controls: Controls, env: Environment)
 
 export const blankState = (): SimState => ({
   position: [0, 0, 0], velocity: [0, 0, 0], attitude: attitudeQuat(0, 0, 0), omega: [0, 0, 0],
-  rpm: 0, motors: [0, 0, 0, 0], gearCompression: [], gearPosition: 1,
+  rpm: 0, motors: [0, 0, 0, 0], gearCompression: [], gearPosition: 1, flapPosition: 0,
   onGround: true, crashed: false, crashReason: '', stalled: false,
   airspeed: 0, alpha: 0, beta: 0, gLoad: 1, climbRate: 0, agl: 0, groundSpeed: 0,
   throttleActual: 0, slipstream: 0, rotorInflow: 0, vortexRing: false, autorotation: false,

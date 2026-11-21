@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { applyDisplayControls, newFlightSimulation, physicsFieldId, toDisplayFlight } from './bridge'
 import { hangar } from '../hangar'
 import { fields, runwayAxis, startOnRunway } from './fields'
+import { aerodynamics } from './aero'
+import { zeroControls } from './types'
 
 describe('legacy scene and modern physics bridge', () => {
   it('preserves the runway position and maps the northbound physics axis to the scene', () => {
@@ -53,5 +55,40 @@ describe('legacy scene and modern physics bridge', () => {
     sim.state.onGround = false
     sim.state.agl = 2
     expect(toDisplayFlight(sim).stalled).toBe(true)
+  })
+
+  it('keeps four flight channels intact and actuates flap and retractable gear separately', () => {
+    const sim = newFlightSimulation('jet')
+    sim.reset({ airborne: { altitude: 35, airspeed: 21 } })
+    const controls = { throttle: .45, aileron: .2, elevator: -.1, rudder: -.15 }
+    applyDisplayControls(sim, controls, { flaps: 1, gearDown: false })
+    expect(sim.raw).toMatchObject({ ...controls, flaps: 1 })
+    expect(sim.raw.aux[0]).toBe(1)
+    sim.step()
+    expect(sim.state.flapPosition).toBeGreaterThan(0)
+    expect(sim.state.flapPosition).toBeLessThan(1)
+    expect(sim.state.gearPosition).toBeLessThan(1)
+    applyDisplayControls(sim, controls)
+    expect(sim.raw.flaps).toBe(0)
+    expect(sim.raw.aux[0]).toBe(0)
+    const clean = aerodynamics(sim.spec, sim.state, zeroControls(), sim.env)
+    const flap = aerodynamics(sim.spec, sim.state, { ...zeroControls(), flaps: 1 }, sim.env)
+    expect(flap.drag).toBeGreaterThan(clean.drag)
+    expect(flap.lift).toBeGreaterThan(clean.lift)
+    const trainer = newFlightSimulation('trainer')
+    applyDisplayControls(trainer, controls, { flaps: 1, gearDown: false })
+    expect(trainer.raw).toMatchObject({ ...controls, flaps: 0 })
+    expect(trainer.raw.aux[0]).toBe(0)
+  })
+
+  it('places the Chatfield departure on its photographed runway at the local field pressure altitude', () => {
+    const sim = newFlightSimulation('trainer', 7)
+    expect(sim.field.id).toBe('chatfield')
+    expect(sim.headingDegrees).toBeCloseTo(90)
+    const [x, y, z] = sim.state.position
+    expect(sim.field.height(x, z)).toBeCloseTo(0)
+    expect(y).toBeGreaterThan(0)
+    expect(sim.env.density).toBeLessThan(1.1)
+    expect(sim.field.height(-800, -700)).toBeLessThan(-5)
   })
 })

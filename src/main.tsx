@@ -1,17 +1,17 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Controls } from './flight'
 import { hasTravel, axisSignalSummary, observeTravel, validCalibration, type Travel, flightChannels, standardMapping, calibrateAxis, defaultMapping, defaultTuning, defaultChannels, deviceSources, detectMovedSource, gamepadControls, normalizeSource, readSource, type Mapping, type InputSource, type AxisKey, type InputTuning, type Calibration } from './input'
 import { hidApi, openHidController, type HidController, type HidDeviceLike } from './hid'
 import { hangar, hangarAircraft, soundFamily } from './hangar'
-import { fields } from './sim/fields'
+import { airfieldPilotPosition, fields } from './sim/fields'
 import { assistProfiles } from './sim/simulation'
 import { assessLesson, beginLesson, lessons, type Lesson, type LessonRun } from './school'
 import { FieldMap } from './scene/FieldMap'
-import { FlightDeck } from './FlightDeck'
+import { FlightDeck, FlightNavigation } from './FlightDeck'
 import { type NavTarget } from './avionics'
 import type { CameraMode } from './scene/FlightScene'
-import { applyDisplayControls, newFlightSimulation, physicsFieldId, toDisplayFlight } from './sim/bridge'
+import { applyDisplayControls, cleanConfiguration, hasRetractableGear, newFlightSimulation, physicsFieldId, toDisplayFlight, type AirframeConfiguration } from './sim/bridge'
 import { EngineAudio } from './audio'
 import { ControllerSignalRow } from './ControllerSignalRow'
 import { choosePreferredPad } from './controllerSelection'
@@ -70,10 +70,18 @@ function App() {
   const sound = useRef<EngineAudio | null>(null)
   const [soundOn, setSoundOn] = useState(false)
   const controls = useRef<Controls>({ ...zero })
+  const configuration = useRef(cleanConfiguration)
+  const [airframeConfig, setAirframeConfig] = useState(cleanConfiguration)
+  const [configMessage, setConfigMessage] = useState('')
+  const setConfiguration = useCallback((next: AirframeConfiguration) => {
+    configuration.current = next
+    setAirframeConfig(next)
+    setConfigMessage('')
+  }, [])
   const keys = useRef(new Set<string>())
   const [hud, setHud] = useState(toDisplayFlight(simulation.current))
   const [fieldIndex, setFieldIndex] = useState(0)
-  const [deckVisible, setDeckVisible] = useState(false)
+  const [deckVisible, setDeckVisible] = useState(true)
   const [navTarget, setNavTarget] = useState<NavTarget>('runway')
   const [course, setCourse] = useState(0)
   const [assistMode, setAssistMode] = useState('model')
@@ -107,9 +115,42 @@ function App() {
   const detectButtonsBaseline = useRef<number[]>([])
   const [paused, setPaused] = useState(false)
   const [cameraMode, setCameraMode] = useState<CameraMode>('chase')
+  const activeCamera = useRef<CameraMode>(cameraMode)
+  activeCamera.current = cameraMode
   const [cameraZoom, setCameraZoom] = useState(1.15)
   const [showSettings, setShowSettings] = useState(false)
   const [showRoom, setShowRoom] = useState(false)
+  const commandFlaps = useCallback((next: AirframeConfiguration['flaps']) => {
+    if (!engine.spec.flaps) return
+    if (next > configuration.current.flaps && engine.state.airspeed > engine.spec.flaps.maxDeploySpeed) {
+      setConfigMessage('Flap açma hızı aşıldı.')
+      return
+    }
+    setConfiguration({ ...configuration.current, flaps: next })
+  }, [engine, setConfiguration])
+  const commandGear = useCallback(() => {
+    if (!hasRetractableGear(engine.spec)) return
+    if (configuration.current.gearDown && engine.state.onGround) {
+      setConfigMessage('İniş takımı yerde kilitli.')
+      return
+    }
+    setConfiguration({ ...configuration.current, gearDown: !configuration.current.gearDown })
+  }, [engine, setConfiguration])
+  useEffect(() => {
+    if (showSettings || showRoom) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
+      if (e.target instanceof HTMLElement && (e.target.closest('input,select,button,textarea') || e.target.isContentEditable)) return
+      if (e.code === 'KeyG') commandGear()
+      if (e.code === 'KeyF') {
+        const current = configuration.current.flaps
+        const overSpeed = engine.spec.flaps && engine.state.airspeed > engine.spec.flaps.maxDeploySpeed
+        commandFlaps(overSpeed && current > 0 ? 0 : current === 0 ? .5 : current === .5 ? 1 : 0)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [commandFlaps, commandGear, engine, showRoom, showSettings])
   const [roomInput, setRoomInput] = useState(() => normalizeRoomCode(new URLSearchParams(location.search).get('room') || ''))
   const [pilotName, setPilotName] = useState(() => localStorage.getItem('flight-pilot-name') || '')
   const [roomPassword, setRoomPassword] = useState('')
@@ -175,7 +216,7 @@ function App() {
       onStatus: (status, message) => { setRoomStatus(status); if (message) setRoomMessage(message) },
       onPeers: (remote, count) => { setPeers(remote); setRoomCount(count) },
       onRoster: setRoomPilots,
-      onField: field => { if (field !== roomFlight.current.fieldIndex) { setFieldIndex(field); simulation.current.reset({ aircraft: hangarAircraft(roomFlight.current.vehicle).id, field: physicsFieldId(field) }); flight.current = toDisplayFlight(simulation.current) } },
+      onField: field => { if (field !== roomFlight.current.fieldIndex) { setFieldIndex(field); setConfiguration(cleanConfiguration); setCourse(fields[field].runway.heading); setNavTarget("runway"); simulation.current.reset({ aircraft: hangarAircraft(roomFlight.current.vehicle).id, field: physicsFieldId(field) }); flight.current = toDisplayFlight(simulation.current) } },
     })
     return disconnect
   }, [roomCode, roomChannel, roomIsHost])
@@ -211,6 +252,7 @@ function App() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur) }
   }, [])
   useEffect(() => {
+    const listener = airfieldPilotPosition(fields[fieldIndex])
     let frame = 0, last = performance.now(), accumulator = 0, display = 0
     const tick = (now: number) => {
       const delta = Math.min((now - last) / 1000, 0.1); last = now
@@ -303,14 +345,16 @@ function App() {
       if (!paused && !changedDevice) {
         accumulator += delta
         while (accumulator >= 1 / 60) {
-          applyDisplayControls(simulation.current, controls.current)
+          applyDisplayControls(simulation.current, controls.current, configuration.current)
           simulation.current.update(1 / 60)
           flight.current = toDisplayFlight(simulation.current)
           if (lessonRun.current) assessLesson(lessonRun.current, simulation.current, 1 / 60)
           accumulator -= 1 / 60
         }
       }
-      sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed, paused || flight.current.crashed, flight.current.engineSpeed)
+      sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed,
+        paused || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
+        activeCamera.current === 'pilot' ? listener : undefined)
       if (now - display > 100) { setHud({ ...flight.current }); if (lessonRun.current) setLessonHud({ ...lessonRun.current }); setPadAxes(pad ? [...pad.axes] : []); setAxisTravel(travel.current.axes.map(range => range && { ...range })); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
       frame = requestAnimationFrame(tick)
     }
@@ -328,6 +372,7 @@ function App() {
     })
     if (assistMode !== 'model') engine.assists = { ...engine.spec.assists, ...assistProfiles[Number(assistMode)] }
     flight.current = toDisplayFlight(engine)
+    setConfiguration(cleanConfiguration)
     controls.current = { ...zero }
     keys.current.clear()
     setHud(flight.current)
@@ -608,12 +653,12 @@ function App() {
     : null
   const field = fields[fieldIndex]
   const aircraft = hangarAircraft(vehicle)
-  const speed = hud.airspeed
-  const bank = Math.round(hud.roll * 180 / Math.PI)
-  const pitch = Math.round(hud.pitch * 180 / Math.PI)
+  const retractable = hasRetractableGear(aircraft)
+  const gearExtension = hud.gearPosition ?? 1
+  const gearLabel = gearExtension > .975 ? 'Açık' : gearExtension < .025 ? 'Kapalı' : airframeConfig.gearDown ? 'Açılıyor' : 'Kapanıyor'
   return <main><header><div className="brand"><img className="brand-icon" src={`${import.meta.env.BASE_URL}flightsimrc.svg`} width="44" height="44" alt="" /><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
     <section className="sim" ref={simRef}>
-      <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div><div>{padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
+      <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div><div className="flight-status">AGL {Math.round(Math.max(0, engine.state.agl))} m · Gaz %{Math.round(controls.current.throttle * 100)} · {padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
       <div className="viewport">
         <Suspense fallback={<div className="scene-loading" role="status">Uçuş alanı yükleniyor…</div>}>
           <FlightScene state={flight} controls={controls} field={field} cameraMode={cameraMode} zoom={cameraZoom} vehicle={vehicle}
@@ -624,13 +669,7 @@ function App() {
         {cameraMode === 'onboard' && <div className="crosshair" aria-hidden="true">+</div>}
         {hud.crashed && <div className="crash"><strong>Uçuş sona erdi</strong><span>{engine.state.crashReason || 'Araç kaza yaptı.'}</span><button onClick={retry}>Yeniden başla</button></div>}
         {hud.stalled && !hud.crashed && <div className="flight-warning">STALL · BURNU İNDİR, HIZ KAZAN</div>}
-        <div className="attitude"><span>YATIŞ {bank}°</span><span>BURUN {pitch}°</span><span>ALFA {speed < 5 ? '—' : Math.round(hud.angleOfAttack * 180 / Math.PI) + '°'}</span></div>
-        <div className="hud">
-          <div><small>HAVA HIZI</small><strong>{Math.round(speed * 3.6)}</strong><span>km/sa</span></div>
-          <div><small>YERDEN</small><strong>{Math.round(Math.max(0, engine.state.agl))}</strong><span>m</span></div>
-          <div><small>GAZ</small><strong>{Math.round(controls.current.throttle * 100)}</strong><span>%</span></div>
-          <div><small>BAŞ</small><strong>{Math.round(engine.headingDegrees) % 360}</strong><span>°</span></div>
-        </div>
+        {deckVisible && <FlightDeck flight={hud} field={field} course={course} target={navTarget} maxSpeed={aircraft.envelope.maxSpeed} />}
         {lessonHud && <div className="lesson-progress">
           <strong>{lessonHud.lesson.name}</strong>
           <span role="status">{lessonHud.status === 'passed' ? 'Başarılı' : lessonHud.status === 'failed' ? 'Ders tamamlanamadı' : lessonHud.message || 'Ders başladı'}</span>
@@ -658,9 +697,9 @@ function App() {
           {assistProfiles.map((profile, index) => <option key={index} value={String(index)}>{profile.label}</option>)}
         </select></label>
         <div>
-          <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'ADI / HSI kapat' : 'ADI / HSI göster'}</button>
+          <button type="button" className="deck-toggle" aria-pressed={deckVisible} onClick={() => setDeckVisible(value => !value)}>{deckVisible ? 'Göstergeleri gizle' : 'Göstergeleri göster'}</button>
           <label className="camera-choice">GÖRÜŞ <select value={cameraMode} onChange={e => setCameraMode(e.target.value as CameraMode)}>
-            <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option>
+            <option value="chase">Takip</option><option value="pilot">RC pilot</option><option value="onboard">Araç üstü</option><option value="overview">Saha üstü</option>
           </select></label>
           <label className="camera-zoom">YAKINLIK <input type="range" min="0.65" max="2.2" step="0.05" value={cameraZoom} onChange={e => setCameraZoom(Number(e.target.value))} /></label>
           <button onClick={() => { if (document.fullscreenElement) void document.exitFullscreen(); else void simRef.current?.requestFullscreen() }}>Tam ekran</button>
@@ -668,8 +707,24 @@ function App() {
           <button onClick={e => { setPaused(!paused); e.currentTarget.blur() }}>{paused ? 'Devam et' : 'Duraklat'}</button>
           <button onClick={e => { retry(); e.currentTarget.blur() }}>{lessonHud ? 'Dersi yeniden başlat' : 'Uçağı sıfırla'}</button>
         </div>
+        {(aircraft.flaps || retractable) && <div className="configuration-controls">
+          {aircraft.flaps && <label>FLAP (F)
+            <select aria-label="Flap konumu" value={airframeConfig.flaps} onChange={event => commandFlaps(Number(event.target.value) as AirframeConfiguration['flaps'])}>
+              {([0, .5, 1] as const).map(value => <option key={value} value={value}
+                disabled={value > airframeConfig.flaps && hud.airspeed > (aircraft.flaps?.maxDeploySpeed ?? 0)}>
+                {value === 0 ? 'Temiz' : value === .5 ? 'Yaklaşma' : 'İniş'} · {Math.round(value * (aircraft.flaps?.maxAngle ?? 0))}°
+              </option>)}
+            </select>
+          </label>}
+          {retractable && <button type="button" aria-pressed={airframeConfig.gearDown} onClick={event => { commandGear(); event.currentTarget.blur() }}>
+            İniş takımı (G) · {gearLabel}
+          </button>}
+          {configMessage && <span role="status">{configMessage}</span>}
+        </div>}
+        {field.orthophoto && <a className="terrain-credit" href={field.orthophoto.source} target="_blank" rel="noreferrer">{field.orthophoto.credit}</a>}
+        {deckVisible && <FlightNavigation flight={hud} field={field} course={course} onCourseChange={setCourse}
+          target={navTarget} onTargetChange={setNavTarget} />}
       </div>
-      {deckVisible && <FlightDeck flight={hud} field={field} course={course} onCourseChange={setCourse} target={navTarget} onTargetChange={setNavTarget} />}
     </section>
     <section className="academy" aria-labelledby="school-title">
       <div className="school-card">
@@ -693,7 +748,7 @@ function App() {
       </div>
     </section>
     <section className="info">
-      <div><strong>KLAVYE</strong><p>W / S gaz, oklar yatış ve irtifa, A / D yatış, Q / E yön dümeni. Bir menüdeyken uçuşa dönmek için sahneye tıkla.</p></div>
+      <div><strong>KLAVYE</strong><p>W / S gaz, oklar yatış ve irtifa, A / D yatış, Q / E yön dümeni. Donanımlı modellerde F flap, G iniş takımı. Bir menüdeyken uçuşa dönmek için sahneye tıkla.</p></div>
       <div><strong>RC KUMANDA / JOYSTICK</strong><p>USB cihazını bağla ve bir kolu oynat. Eksik eksenlerde USB HID bağlantısını, kanal sırası veya yönü farklıysa rehberli kalibrasyonu kullan.</p></div>
       <div><strong>UÇUŞ ALANI</strong><p>{field.notes}</p></div>
     </section>

@@ -1,6 +1,8 @@
 import { clamp, fbm, smoothstep, type Vec3 } from './math'
 import { calmWeather, type WeatherConfig } from './atmosphere'
 import type { GroundTraction } from './types'
+import { chatfieldDatum, chatfieldSize } from './chatfield-data'
+import { chatfieldHeight, chatfieldRunwayCenter, chatfieldRunwayHeading } from './chatfield-terrain'
 
 export type Biome = 'grass' | 'coast' | 'alpine' | 'desert' | 'snow' | 'city' | 'island'
 
@@ -22,6 +24,8 @@ export type Field = {
   biome: Biome
   seed: number
   weather: WeatherConfig
+  datumAltitude?: number
+  orthophoto?: { file: string; width: number; credit: string; source: string }
   runway: Runway
   waterLevel: number
   /** Terrain height above datum, metres. */
@@ -135,7 +139,32 @@ export const fields: Field[] = [
     clearing: 60, trees: 220, buildings: 3, ridgeLift: 0.5,
     notes: 'Sudan kalkış ve suya iniş; step tekniği ve su direnci.',
   },
+  {
+    id: 'chatfield',
+    name: 'Chatfield RC Meydanı',
+    subtitle: 'Colorado · 09 yönü · hava fotoğrafı',
+    biome: 'grass', seed: 113,
+    weather: { ...calmWeather, windSpeed: 2.1, windDirection: 78, turbulence: .14, thermals: .29, label: 'Hafif karşı rüzgâr' },
+    datumAltitude: chatfieldDatum,
+    orthophoto: { file: 'chatfield-naip.jpg', width: chatfieldSize, credit: 'USDA NAIP / USGS 3DEP',
+      source: 'https://www.usgs.gov/national-map-supporting-themes' },
+    runway: { heading: chatfieldRunwayHeading, length: 209.7, width: 16, surface: 'asphalt', center: chatfieldRunwayCenter, elevation: 0 },
+    waterLevel: -Infinity,
+    height: chatfieldHeight,
+    clearing: 140, trees: 0, buildings: 0, ridgeLift: .35,
+    notes: 'Chatfield Aerodrome’un doğu-batı pisti ve çevresi yaklaşık 2,7 × 2,7 km hava fotoğrafı ve yükseklik verisiyle modellenmiştir.',
+  },
 ]
+
+export function airfieldPilotPosition(field: Field): [number, number, number] {
+  const { center, heading, width, length } = field.runway
+  const angle = heading * Math.PI / 180
+  const lateral = width / 2 + 7
+  const back = length * .3
+  const x = center[0] + Math.cos(angle) * lateral - Math.sin(angle) * back
+  const z = -center[1] - Math.sin(angle) * lateral - Math.cos(angle) * back
+  return [x, Math.max(field.height(x, -z), field.waterLevel) + 1.7, z]
+}
 
 export const fieldById = (id: string): Field => fields.find(f => f.id === id) ?? fields[0]
 const paved: GroundTraction = { rolling: 1, braking: 1, lateral: 1 }

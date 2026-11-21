@@ -100,12 +100,12 @@ export class Simulation {
 
   private buildEnvironment(time: number): Environment {
     const field = this.field
-    const density = atmosphere(this.state?.position[1] ?? 0).density
+    const air = atmosphere((this.state?.position[1] ?? 0) + (field.datumAltitude ?? 0))
     return {
       wind: [0, 0, 0],
       turbulence: this.weather.turbulence,
-      density,
-      temperature: atmosphere(this.state?.position[1] ?? 0).temperature,
+      density: air.density,
+      temperature: air.temperature,
       groundHeight: (x, z) => field.height(x, z),
       groundTraction: (x, z) => groundTractionAt(field, x, z),
       waterHeight: field.waterLevel,
@@ -193,7 +193,7 @@ export class Simulation {
     if (this.assists.windEffects && this.field.ridgeLift > 0) {
       wind[1] += ridgeLiftAt(this.field, state.position[0], state.position[2], agl, wind)
     }
-    const air = atmosphere(state.position[1])
+    const air = atmosphere(state.position[1] + (this.field.datumAltitude ?? 0))
     this.env = {
       wind, turbulence: this.weather.turbulence, density: air.density, temperature: air.temperature,
       groundHeight: (x, z) => this.field.height(x, z),
@@ -201,6 +201,12 @@ export class Simulation {
       waterHeight: this.field.waterLevel, time: state.time,
     }
     this.applied = applyAssists(this.spec, state, this.raw, this.assists)
+    if (this.spec.flaps) {
+      const command = this.applied.flaps
+      const position = lag(state.flapPosition, command, .24, dt)
+      state.flapPosition = Math.abs(position - command) < .001 ? command : position
+      this.applied.flaps = state.flapPosition
+    }
     // Actuators.
     if (this.spec.family === 'fixed') {
       const idle = this.spec.prop.idleRpm / this.spec.prop.maxRpm

@@ -230,6 +230,7 @@ export const aircraftCatalog: AircraftSpec[] = [
       ...bodyParts(1.2, 0.09),
     ],
     prop: prop({ staticThrust: 34, diameter: 0.33, pitch: 0.2, maxRpm: 9800, inertia: 0.0013, pFactor: 0.7 }),
+    flaps: { maxAngle: 42, maxDeploySpeed: 20 },
     gear: [
       wheel('nose', [0.34, 0, 0.2], { steering: 0.45, radius: 0.028, stiffness: 3000, retractChannel: 0 }),
       wheel('main-left', [-0.05, -0.2, 0.21], { brake: 0.6, stiffness: 3400, radius: 0.033, retractChannel: 0 }),
@@ -262,6 +263,7 @@ export const aircraftCatalog: AircraftSpec[] = [
       ...bodyParts(1.05, 0.075),
     ],
     prop: prop({ kind: 'edf', staticThrust: 40, diameter: 0.09, pitch: 0.14, maxRpm: 32000, idleRpm: 4000, inertia: 0.0002, slipstream: 0.15, pFactor: 0, spoolTime: 0.35, rotation: 1 }),
+    flaps: { maxAngle: 38, maxDeploySpeed: 27, wingLift: .28, wingDrag: .075 },
     gear: [
       wheel('nose', [0.3, 0, 0.13], { steering: 0.35, radius: 0.02, stiffness: 2400, retractChannel: 0 }),
       wheel('main-left', [-0.06, -0.15, 0.14], { brake: 0.5, stiffness: 2800, radius: 0.024, retractChannel: 0 }),

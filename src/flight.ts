@@ -18,6 +18,7 @@ export type FlightState = {
   stalled: boolean
   engineSpeed?: number
   gearPosition?: number
+  flapPosition?: number
 }
 
 const GROUND_HEIGHT = .25

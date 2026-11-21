@@ -52,43 +52,9 @@ function Helicopter({ controls }: { controls: React.MutableRefObject<Controls> }
   </group>
 }
 
-function jetWing(side: number) {
-  const outline = [[.08, .20], [.09, -.24], [.72, -.31], [.67, -.20]]
-  const vertices: number[] = []
-  for (const y of [-.012, .012]) for (const [x, z] of outline) vertices.push(side * x, y, z)
-  const indices = [0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6]
-  for (let i = 0; i < 4; i++) { const j = (i + 1) % 4; indices.push(i, j, 4 + i, j, 4 + j, 4 + i) }
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
-  geometry.setIndex(indices)
-  geometry.computeVertexNormals()
-  return geometry
-}
-
-function Jet() {
-  return <group>
-    <mesh rotation={[Math.PI / 2, 0, 0]} castShadow><cylinderGeometry args={[.045, .085, .88, 24]} /><meshStandardMaterial color="#d9dedc" metalness={.3} roughness={.35} /></mesh>
-    <mesh position={[0, .035, .15]} scale={[.075, .055, .2]}><sphereGeometry args={[1, 20, 12]} /><meshPhysicalMaterial color="#1a425b" metalness={.4} roughness={.07} clearcoat={1} /></mesh>
-    <mesh position={[0, .018, .48]} rotation={[Math.PI / 2, 0, 0]}><coneGeometry args={[.044, .16, 16]} /><meshStandardMaterial color="#f2f2e5" metalness={.62} roughness={.25} /></mesh>
-    <mesh position={[0, -.02, .16]}><boxGeometry args={[.095, .012, .16]} /><meshStandardMaterial color="#ef7549" metalness={.2} roughness={.34} /></mesh>
-    {[-1, 1].map(side => <group key={side} scale={[side, 1, 1]}>
-      <mesh geometry={jetWing(-1)} castShadow><meshStandardMaterial color="#d9dedc" metalness={.2} roughness={.4} side={THREE.DoubleSide} /></mesh>
-      <mesh position={[-.48, .005, -.07]} castShadow><boxGeometry args={[.3, .012, .12]} /><meshStandardMaterial color="#db573b" metalness={.25} roughness={.3} /></mesh>
-      <mesh position={[-.69, .012, -.28]}><sphereGeometry args={[.018, 10, 8]} /><meshStandardMaterial color={side === -1 ? '#f86961' : '#71e8a0'} emissive={side === -1 ? '#fa2925' : '#28dc75'} emissiveIntensity={2} /></mesh>
-      <mesh position={[-.17, .015, -.35]}><boxGeometry args={[.25, .014, .13]} /><meshStandardMaterial color="#d9dedc" /></mesh>
-      <mesh position={[-.16, .09, -.33]}><boxGeometry args={[.015, .16, .14]} /><meshStandardMaterial color="#d34f3b" /></mesh>
-    </group>)}
-    <mesh position={[0, 0, -.46]} rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[.047, .047, .02, 24]} /><meshStandardMaterial color="#30393b" metalness={.55} /></mesh>
-    <mesh position={[0, 0, -.472]} rotation={[Math.PI / 2, 0, 0]}><circleGeometry args={[.038, 20]} /><meshStandardMaterial color="#eb9262" emissive="#ff4f22" emissiveIntensity={1.45} side={THREE.DoubleSide} /></mesh>
-    {[-.2, .2].map(x => <mesh key={x} position={[x, -.16, .04]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[.042, .042, .025, 16]} /><meshStandardMaterial color="#22282a" /></mesh>)}
-    <mesh position={[0, -.15, .31]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[.032, .032, .02, 16]} /><meshStandardMaterial color="#22282a" /></mesh>
-  </group>
-}
-
 export function VehicleModel({ kind, controls, state }: { kind: string; controls: React.MutableRefObject<Controls>; state?: React.RefObject<FlightState> }) {
   if (kind === 'drone') return <Drone controls={controls} />
   if (kind === 'helicopter') return <Helicopter controls={controls} />
-  if (kind === 'jet') return <Jet />
   if (kind === 'trainer') return <Trainer controls={controls} />
   if (kind === 'cinedrone') return <group scale={1.24}><Drone controls={controls} /></group>
   return <FixedWing spec={hangarAircraft(kind)} controls={controls} state={state} />

@@ -15,6 +15,7 @@ FlightSimRC; model uçak, drone, helikopter ve EDF jet kontrolünü öğrenmek i
 3. USB RC kumandanı veya joystick'ini tak ve bir kolu oynat. Tarayıcıda yalnızca bazı eksenler görünüyorsa **USB HID kumandası bağla** seçeneğini kullan. Cihazın ilk WebHID bağlantısında tarayıcı izin ister. **Rehberli kalibrasyon** dört ana kolu uç konumlarından tanır ve ayarları bu cihaza kaydeder. Gaz rölantideyken **Kumandayı etkinleştir**. Sorun yaşarsan **Kumanda tanı bilgisini kopyala** ile tarayıcının gördüğü canlı değerleri incele.
 4. Arkadaşınla uçmak için **Çok oyunculu** panelinde pilot adını yaz, istersen en az 8 karakterlik oda şifresi belirle ve **Yeni oda oluştur**. Davet bağlantısını paylaş; şifre koyduysan onu ayrıca ilet. Diğer pilot aynı kod ve şifreyle katılır. Pilot adları ve kurucu odada listelenir. Oda en fazla dört pilot içindir.
 5. **Uçuş okulu** bölümünden kalkış, dengeli uçuş, iniş veya hover seç. Ders ilerlemesi uçuş telemetrisiyle ölçülür.
+6. **Chatfield RC Meydanı** için USGS hava fotoğrafı ve yükseklik verisi kullanılır. **Saha üstü** kamera alanı kuşbakışı gösterir. T-28 ve Viper EDF 90’da **F** flap kademesini, **G** iniş takımını değiştirir.
 
 ### RadioLink T12D görünmüyorsa
 
@@ -28,8 +29,8 @@ Tarayıcı bir kumandanın yalnızca işletim sisteminin ve Gamepad API'nin sund
 
 | Alan | Mevcut durum |
 | --- | --- |
-| Uçuş | 60 Hz sabit adımlı trainer/jet kuvvet modeli; ayrı stabilize drone ve helikopter davranışı; stall, rüzgâr ve yer teması |
-| Görsel | Kodla oluşturulmuş dört araç, dokulu pist, hangar, HDR gökyüzü, HUD, takip/RC pilot/araç üstü kameraları ve yakınlaştırma |
+| Uçuş | 240 Hz fizik motoru. Sabit kanat, drone ve helikopter modelleri. Donanımlı modellerde kademeli flap ve açılır iniş takımı. |
+| Görsel | 11 RC model, 8 meydan, uçuş ekranında yuvarlak ADI/HSI/hava hızı göstergeleri ve dört kamera görüşü. |
 | Kumanda | Gamepad API, cihaz seçimi, cihaz bazlı profil, eksen eşleme, tersleme, ölü bölge, expo, min/orta/maks kalibrasyonu, sıfır gaz güvenlik adımı |
 | Canlı oda | Supabase Realtime ile oda kodu, isteğe bağlı şifre, pilot adı/listesi, yaklaşık 5 Hz konum paylaşımı ve diğer araçların sahnede gösterimi |
 | Yayın | Her `main` güncellemesinde GitHub Actions test/derleme ve GitHub Pages yayını |

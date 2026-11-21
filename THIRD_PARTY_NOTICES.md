@@ -21,3 +21,8 @@ Bu liste transitif bağımlılıkların tümünü kapsamaz. Dağıtımda `packag
 | farm_field_puresky 1K HDRI | [Poly Haven](https://polyhaven.com/a/farm_field_puresky) | [CC0](https://polyhaven.com/license) |
 
 Dosyalar `public/textures/` altında tutulur. Uçak ve saha geometrisi proje içinde oluşturulmuştur.
+
+## Chatfield RC sahası
+
+- Hava fotoğrafı `public/terrain/chatfield-naip.jpg` için USDA NAIP doğal renkli ortofoto, USGS The National Map Imagery Only servisi üzerinden alınmıştır. Colorado’daki bu kapsama kamu malıdır. [USGS NAIP veri kaydı](https://doi.org/10.5066/F7QN651G)
+- `src/sim/chatfield-data.ts` için USGS 3DEP yükseklik verisi kullanılmıştır. Örnekler 129 × 129 ızgarada, pist referansına göre desimetreye yuvarlanarak saklanır. [USGS 3DEP yükseklik servisi](https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer)

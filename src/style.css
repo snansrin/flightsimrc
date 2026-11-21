@@ -321,122 +321,6 @@ body {
   background: #297762;
   box-shadow: 0 0 0 3px #61d9b14a, 0 0 16px #68ffe2;
 }
-.flight-deck {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(190px, .68fr);
-  gap: 14px;
-  padding: 16px;
-  background: linear-gradient(135deg, #0c1b27, #102a36 65%, #122b34);
-  border-top: 1px solid #3e6572;
-  color: var(--deck-ink);
-}
-.deck-instrument {
-  min-width: 0;
-  padding: 13px 15px 14px;
-  border: 1px solid var(--deck-divider);
-  background: linear-gradient(150deg, #1a3141, #101f2e 85%);
-  border-radius: 11px;
-  box-shadow: inset 0 1px 0 #aee5f21c, 0 7px 24px #06101933;
-}
-.deck-instrument-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 7px;
-  font: 750 11px/1.4 'Segoe UI', Arial, sans-serif;
-  letter-spacing: 1.4px;
-  color: #d1e9ee;
-}
-.deck-online { color: var(--deck-teal); font-weight: 650; font-size: 10px; letter-spacing: .5px; white-space: nowrap; }
-.deck-instrument svg { display: block; width: min(100%, 224px); margin: 7px auto 4px; overflow: visible; filter: drop-shadow(0 4px 14px #02090f80); }
-.deck-hsi svg { width: min(100%, 222px); }
-.deck-instrument svg text { user-select: none; }
-.deck-adi-readouts, .deck-nav-readouts {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 7px;
-  padding-top: 8px;
-  border-top: 1px solid #3a5d6b;
-}
-.deck-nav-readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.deck-adi-readouts > div, .deck-nav-readouts > div { display: flex; align-items: center; flex-direction: column; gap: 3px; text-align: center; min-width: 0; }
-.deck-adi-readouts span, .deck-nav-readouts span {
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: .8px;
-  color: var(--deck-muted);
-}
-.deck-adi-readouts strong, .deck-nav-readouts strong {
-  font-size: clamp(12px, 1.35vw, 17px);
-  line-height: 1.5;
-  font-weight: 750;
-  font-variant-numeric: tabular-nums;
-  color: #f4f5f0;
-  white-space: nowrap;
-}
-.deck-adi-readouts small, .deck-nav-readouts small { font-size: 10px; color: var(--deck-muted); }
-.deck-course-chooser {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
-}
-.deck-course-chooser label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; font-weight: 650; color: #a8c4cb; }
-.deck-course-chooser select {
-  flex: 1;
-  min-width: 0;
-  max-width: 205px;
-  background: #213f4f;
-  color: #f0f6f6;
-  border: 1px solid #527889;
-  border-radius: 5px;
-  padding: 8px;
-}
-.deck-course-buttons { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.deck-course-buttons span { margin-right: auto; font-size: 11px; letter-spacing: 1px; color: #a8c4cb; }
-.deck-course-buttons button {
-  background: #193d4b;
-  color: var(--deck-ink);
-  border: 1px solid #4f7d8b;
-  border-radius: 5px;
-  padding: 7px 11px;
-  font-size: 12px;
-  font-weight: 700;
-}
-.deck-course-buttons button:hover, .deck-course-buttons button:focus-visible { background: #24637a; color: white; outline-color: var(--deck-teal); }
-.deck-nav-status { margin: 10px 0 0; color: var(--deck-teal); font: 600 10px/1.5 'Segoe UI',Arial,sans-serif; letter-spacing: .4px; }
-.deck-side-data { display: grid; grid-template-columns: 1fr; align-content: start; gap: 10px; }
-.deck-metric {
-  padding: 12px 14px;
-  background: #132b39;
-  border: 1px solid #315468;
-  border-left: 3px solid #5dc4ba;
-  border-radius: 7px;
-}
-.deck-metric:nth-child(2) { border-left-color: var(--deck-amber); }
-.deck-metric:nth-child(3) { border-left-color: #6e9ce0; }
-.deck-metric:nth-child(4) { border-left-color: #cda2ef; }
-.deck-metric > span { color: #91b7c1; font-size: 10px; font-weight: 700; letter-spacing: .7px; }
-.deck-metric strong { display: flex; align-items: baseline; gap: 7px; margin-top: 5px; font: 700 26px/1.15 'Segoe UI',Arial,sans-serif; font-variant-numeric: tabular-nums; }
-.deck-metric small { color: #94afba; font-size: 11px; }
-.deck-disclaimer { margin: 0; color: #86a3ac; font-size: 10px; line-height: 1.45; }
-@media (max-width: 1050px) {
-  .flight-deck { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .deck-side-data { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0,1fr)); }
-  .deck-disclaimer { grid-column: 1 / -1; }
-  .deck-metric { padding: 10px; }
-  .deck-metric strong { font-size: 21px; }
-}
-@media (max-width: 600px) {
-  .flight-deck { grid-template-columns: minmax(0,1fr); padding: 10px; gap: 10px; }
-  .deck-side-data { grid-column: 1; grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .deck-disclaimer { grid-column: 1 / -1; }
-  .deck-instrument svg { width: min(100%,210px); }
-  .deck-metric strong { font-size: 22px; }
-  .field-map { width: 92px; }
-  .deck-instrument-title { font-size: 10px; }
-}
-@media (prefers-reduced-motion: reduce) { .flight-deck * { scroll-behavior: auto; } }
 
 /* Flight-first layout: aircraft/runway visibility always outranks instrument cards. */
 main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
@@ -458,49 +342,6 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
 .hud div { min-width: 82px; padding: 7px 11px; }
 .hud strong { font-size: 23px; }
 
-/* Optional ADI/HSI panel is deliberately compact and placed AFTER flight controls. */
-.flight-deck {
-  grid-template-columns: minmax(180px, .85fr) minmax(340px, 1.65fr) minmax(200px, 1fr);
-  align-items: stretch;
-  gap: 9px;
-  padding: 9px;
-}
-.deck-instrument { padding: 9px 11px; }
-.deck-instrument svg { width: min(100%, 156px); margin: 3px auto; }
-.deck-adi-readouts strong, .deck-nav-readouts strong { font-size: 13px; }
-.deck-adi-readouts span, .deck-nav-readouts span { font-size: 9px; }
-.deck-hsi {
-  display: grid;
-  grid-template-columns: minmax(132px, 175px) minmax(0, 1fr);
-  grid-template-rows: auto auto auto 1fr;
-  column-gap: 12px;
-  row-gap: 4px;
-}
-.deck-hsi .deck-instrument-title { grid-column: 1 / -1; grid-row: 1; }
-.deck-hsi svg { grid-column: 1; grid-row: 2 / 4; width: min(100%, 165px); margin: 0; align-self: center; }
-.deck-hsi .deck-nav-readouts {
-  grid-column: 2; grid-row: 2;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-  border-top: 0;
-  padding: 0;
-  align-content: center;
-}
-.deck-hsi .deck-course-chooser { grid-column: 2; grid-row: 3; padding: 2px 0 0; gap: 5px; }
-.deck-hsi .deck-nav-status { grid-column: 1 / -1; grid-row: 4; margin: 0; align-self: end; }
-.deck-course-chooser select { padding: 5px; max-width: 180px; font-size: 11px; }
-.deck-course-buttons button { padding: 5px 7px; font-size: 10px; }
-.deck-side-data { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.deck-metric { padding: 9px; }
-.deck-metric strong { font-size: 21px; }
-.deck-disclaimer { grid-column: 1 / -1; }
-
-@media (max-width: 1180px) {
-  .flight-deck { grid-template-columns: minmax(180px, .9fr) minmax(340px, 1.7fr); }
-  .deck-side-data { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .deck-disclaimer { grid-column: 1 / -1; }
-  .toolbar > div { flex-basis: 100%; }
-}
 @media (max-width: 780px) {
   .viewport { height: 73vh; height: 73svh; min-height: 420px; max-height: 780px; }
   .simtop { padding: 9px 12px; }
@@ -511,21 +352,7 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
   .hud strong { font-size: 19px; }
   .toolbar { padding: 9px; }
   .toolbar > div { gap: 5px; }
-  .flight-deck {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(260px, 85%);
-    grid-template-columns: none;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    padding: 9px;
-  }
-  .flight-deck > .deck-instrument { scroll-snap-align: start; }
-  .flight-deck .deck-side-data { display: none; }
-  .deck-hsi { display: block; }
-  .deck-hsi svg { display: block; width: 128px; margin: 0 auto; }
-  .deck-hsi .deck-nav-readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #3a5d6b; padding-top: 5px; }
-  .deck-hsi .deck-course-chooser { padding-top: 6px; }
+
 }
 @media (max-width: 480px) {
   main { padding-inline: 8px; }
@@ -535,5 +362,41 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
   .hud div { min-width: 57px; }
   .simtop { letter-spacing: .3px; font-size: 10px; }
 }
-/* Full-screen flight mode is reserved for the 3D scene; instruments can be expanded after exit. */
-.sim:fullscreen .flight-deck, .sim:fullscreen .deck-toggle { display: none; }
+.flight-instruments {
+  --dial: clamp(65px, 8vw, 100px);
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 5px;
+  pointer-events: none;
+}
+.flight-instrument { width: var(--dial); height: var(--dial); filter: drop-shadow(0 2px 4px #0007); }
+.instrument-face { fill: #101f29f2; }
+.instrument-bezel { fill: none; stroke: #9eb3bd; stroke-width: 2; }
+.flight-instrument text { font-family: 'Segoe UI', sans-serif; text-anchor: middle; }
+.instrument-value { fill: #f6fbf8; font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.instrument-unit, .instrument-compass { fill: #d3e0e5; font-size: 8px; font-weight: 650; }
+.instrument-label { fill: #fff6e3; font-size: 11px; letter-spacing: .04em; font-weight: 750; }
+.simtop .flight-status { font-variant-numeric: tabular-nums; }
+.terrain-credit { font-size: 11px; color: #cadbdc; }
+.configuration-controls { display: flex; gap: 10px; }
+.configuration-controls button[aria-pressed="true"] { border-color: #e5955f; }
+.configuration-controls button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .flight-instruments { --dial: clamp(54px, 16vw, 70px); gap: 2px; left: 6px; bottom: 7px; }
+}
+
+.flight-navigation { flex: 1 1 100%; font-size: 12px; letter-spacing: .03em; }
+.flight-navigation summary { width: fit-content; cursor: pointer; padding: 7px 0; color: #cce4e3; }
+.flight-navigation-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 4px 0 8px; }
+.flight-navigation-controls label { flex: 0 1 260px; }
+.flight-navigation-controls button { padding: 5px 9px; }
+.flight-navigation small { color: #b4c7cf; }
+.toolbar > .configuration-controls { align-items: center; justify-content: flex-start; flex: 1 1 100%; }
+.toolbar .configuration-controls label { flex: 0 1 270px; }
+.field-map { border-radius: 50%; overflow: hidden; }
+.field-map .map-north { top: 5px; left: 50%; transform: translateX(-50%); }
+.field-map .map-scale { right: 50%; bottom: 6px; transform: translateX(50%); white-space: nowrap; }
+.simtop { gap: 8px; flex-wrap: wrap; }
+.lesson-progress { z-index: 1; }

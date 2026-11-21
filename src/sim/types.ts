@@ -136,6 +136,7 @@ export type AircraftSpec = {
   surfaces: Surface[]
   prop: PropSpec
   gear: GearPoint[]
+  flaps?: { maxAngle: number; maxDeploySpeed: number; wingLift?: number; wingDrag?: number }
   rotor?: RotorSpec
   /** Visual parameters consumed by the parametric model builder. */
   visual: {
@@ -177,6 +178,7 @@ export type SimState = {
   motors: number[]
   gearCompression: number[]
   gearPosition: number
+  flapPosition: number
   onGround: boolean
   crashed: boolean
   crashReason: string

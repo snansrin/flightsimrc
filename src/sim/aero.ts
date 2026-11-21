@@ -139,6 +139,11 @@ export function aerodynamics(
       cdExtra += surface.controlCd * controls.flaps * controls.flaps * 2.2
       stallShift = -0.035 * controls.flaps
     }
+    if (surface.kind === 'wing' && spec.flaps?.wingLift && controls.flaps > 0) {
+      clExtra += spec.flaps.wingLift * controls.flaps
+      cdExtra += (spec.flaps.wingDrag ?? 0) * controls.flaps ** 2
+      stallShift = -.025 * controls.flaps
+    }
 
     let componentForce: Vec3 = [0, 0, 0]
     let localAlpha = 0

@@ -4,13 +4,13 @@ import * as THREE from 'three'
 import type { Controls, FlightState } from '../flight'
 import { hangarAircraft } from '../hangar'
 import type { RemotePilot } from '../multiplayer'
-import type { Field } from '../sim/fields'
-import { Airfield, airfieldPilotPosition } from './Airfield'
+import { airfieldPilotPosition, type Field } from '../sim/fields'
+import { Airfield } from './Airfield'
 import { VehicleModel } from './Vehicles'
 import { RemoteAircraft } from './RemoteAircraft'
 import { chaseFraming } from './cameraFraming'
 
-export type CameraMode = 'chase' | 'pilot' | 'onboard'
+export type CameraMode = 'chase' | 'pilot' | 'onboard' | 'overview'
 function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; cameraMode: CameraMode; zoom: number; vehicle: string; field: Field }) {
   const ref = useRef<THREE.Group>(null)
   const vectors = useMemo(() => ({
@@ -33,14 +33,19 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
     forward.set(0, 0, 1).applyEuler(attitude)
     if (cameraMode === 'pilot') desired.set(...pilot)
     else if (cameraMode === 'onboard') desired.set(0, .2, aircraft.visual.noseLength + .12).applyEuler(attitude).add(ref.current.position)
-    else desired.set(s.position[0] - Math.sin(s.yaw) * chaseDistance, s.position[1] + chaseHeight, s.position[2] - Math.cos(s.yaw) * chaseDistance)
+    else if (cameraMode === 'overview') desired.set(s.position[0], s.position[1] + 150 * zoom, s.position[2] - 5)
+    else {
+      desired.set(s.position[0] - Math.sin(s.yaw) * chaseDistance, s.position[1] + chaseHeight, s.position[2] - Math.cos(s.yaw) * chaseDistance)
+      desired.y = Math.max(desired.y, field.height(desired.x, -desired.z) + .38, field.waterLevel + .38)
+    }
     camera.position.lerp(desired, cameraMode === 'onboard' ? 1 : 1 - Math.exp(-dt * 8))
     if (cameraMode === 'onboard') {
       camera.up.set(0, 1, 0).applyEuler(attitude)
       camera.lookAt(target.copy(desired).addScaledVector(forward, 20))
     } else {
-      camera.up.set(0, 1, 0)
-      camera.lookAt(target.set(...s.position).addScaledVector(forward, cameraMode === 'pilot' ? 0 : .45))
+      if (cameraMode === 'overview') camera.up.set(0, 0, 1)
+      else camera.up.set(0, 1, 0)
+      camera.lookAt(target.set(...s.position).addScaledVector(forward, cameraMode === 'chase' ? .45 : 0))
     }
     if (camera instanceof THREE.PerspectiveCamera) {
       const fov = cameraMode === 'pilot' ? 58 / zoom : cameraMode === 'onboard' ? THREE.MathUtils.clamp(75 / zoom, 40, 100) : chase.fov
@@ -50,7 +55,7 @@ function Aircraft({ state, controls, cameraMode, zoom, vehicle, field }: { state
   return <group ref={ref}>{cameraMode !== 'onboard' && <VehicleModel kind={vehicle} controls={controls} state={state} />}</group>
 }
 export default function FlightScene({ state, controls, field, cameraMode, zoom, vehicle, peers }: { state: React.MutableRefObject<FlightState>; controls: React.MutableRefObject<Controls>; field: Field; cameraMode: CameraMode; zoom: number; vehicle: string; peers: RemotePilot[] }) {
-  return <Canvas camera={{ position: [0, 1.4, -4], fov: 58, near: .025, far: 1100 }} dpr={[1, 1.5]} shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>
+  return <Canvas camera={{ position: [0, 1.4, -4], fov: 58, near: .025, far: 2000 }} dpr={[1, 1.5]} shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}>
     <Airfield field={field} /><Aircraft state={state} controls={controls} cameraMode={cameraMode} zoom={zoom} vehicle={vehicle} field={field} />
     {peers.map(pilot => <RemoteAircraft key={pilot.id} pilot={pilot} />)}
   </Canvas>
