@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import type { FlightState } from '../flight'
 import { coarseEdgeHeight, coarserNeighbor, terrainSubdivisions, terrainTiles, tileKey, type Tile, type WorldTerrain } from '../sim/worldTerrain'
 import { WorldBuildings } from './WorldBuildings'
+import { addGroundGrain } from './groundAppearance'
 
 type TileAsset = { tile: Tile; map: THREE.Texture | null }
 const interval = .55
@@ -106,7 +107,8 @@ function GroundTile({ world, asset, visible }: { world: WorldTerrain; asset: Til
   useEffect(() => () => geometry.dispose(), [geometry])
   return <mesh geometry={geometry}>
     <meshLambertMaterial map={asset.map} color={asset.map ? '#eaf0e6' : '#6d776c'}
-      emissiveMap={asset.map} emissive={asset.map ? '#ffffff' : '#000000'} emissiveIntensity={.28} side={THREE.DoubleSide} />
+      emissiveMap={asset.map} emissive={asset.map ? '#ffffff' : '#000000'} emissiveIntensity={.28} side={THREE.DoubleSide}
+      onBeforeCompile={addGroundGrain} />
   </mesh>
 }
 

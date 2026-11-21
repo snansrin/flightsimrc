@@ -13,14 +13,27 @@ export function bladePassageFrequency(spec: AircraftSpec, power: number): number
   return rpm * spec.prop.maxRpm * (spec.prop.kind === 'edf' ? 11 : Math.max(2, spec.visual.propBlades)) / 60
 }
 
-export function soundPerspective(flight: Pick<FlightState, 'position' | 'velocity'>, listener?: Vec3) {
-  if (!listener) return { gain: 1, doppler: 1 }
+export function soundPerspective(flight: Pick<FlightState, 'position' | 'velocity'>, listener?: Vec3, heading = 0) {
+  if (!listener) return { gain: 1, doppler: 1, pan: 0, lowpass: 17000 }
   const dx = flight.position[0] - listener[0], dy = flight.position[1] - listener[1], dz = flight.position[2] - listener[2]
   const distance = Math.hypot(dx, dy, dz)
   const [vx, vy, vz] = flight.velocity
   const radial = distance > 1 ? (dx * vx + dy * vy + dz * vz) / distance : 0
-  return { gain: 1 / Math.hypot(1, distance / 14), doppler: 343 / (343 + clamp(radial, -95, 95)) }
+  const lateral = dx * Math.cos(heading) - dz * Math.sin(heading)
+  return {
+    gain: 1 / Math.hypot(1, distance / 17),
+    doppler: 343 / (343 + clamp(radial, -95, 95)),
+    pan: clamp(lateral / Math.max(9, distance), -.88, .88),
+    lowpass: 850 + 16150 / (1 + (distance / 80) ** 1.5),
+  }
 }
+
+const spectra = {
+  trainer: [0, 1, .3, .21, .095, .05, .027],
+  helicopter: [0, 1, .65, .48, .32, .19, .12, .08],
+  drone: [0, 1, .23, .15, .08, .036],
+  jet: [0, 1, .12, .047],
+} satisfies Record<VehicleKind, number[]>
 
 export type EngineTimbre = {
   fundamental: number
@@ -74,7 +87,12 @@ export class EngineAudio {
   private engineNoiseGain: GainNode
   private windNoiseGain: GainNode
   private engineFilter: BiquadFilterNode
+  private windFilter: BiquadFilterNode
   private master: GainNode
+  private distanceFilter: BiquadFilterNode
+  private panner: StereoPannerNode
+  private waves: Record<VehicleKind, PeriodicWave>
+  private profile?: VehicleKind
 
   constructor() {
     this.context = new AudioContext()
@@ -87,7 +105,14 @@ export class EngineAudio {
     compressor.ratio.value = 6
     compressor.attack.value = .004
     compressor.release.value = .16
-    this.master.connect(compressor).connect(ctx.destination)
+    this.distanceFilter = ctx.createBiquadFilter()
+    this.distanceFilter.type = 'lowpass'
+    this.distanceFilter.frequency.value = 17000
+    this.distanceFilter.Q.value = .12
+    this.panner = ctx.createStereoPanner()
+    this.master.connect(this.distanceFilter).connect(this.panner).connect(compressor).connect(ctx.destination)
+    const wave = (kind: VehicleKind) => ctx.createPeriodicWave(new Float32Array(spectra[kind].length), new Float32Array(spectra[kind]))
+    this.waves = { trainer: wave('trainer'), jet: wave('jet'), drone: wave('drone'), helicopter: wave('helicopter') }
 
     const osc = (type: OscillatorType) => {
       const node = ctx.createOscillator()
@@ -98,7 +123,7 @@ export class EngineAudio {
       node.start()
       return { node, gain }
     }
-    const fundamental = osc('sawtooth')
+    const fundamental = osc('sine')
     const overtone = osc('triangle')
     const blades = osc('sine')
     const turbine = osc('sine')
@@ -125,35 +150,56 @@ export class EngineAudio {
     this.engineNoiseGain = ctx.createGain()
     this.engineNoiseGain.gain.value = 0
     noise.connect(engineFilter).connect(this.engineNoiseGain).connect(this.master)
-    const windFilter = ctx.createBiquadFilter()
-    windFilter.type = 'highpass'
-    windFilter.frequency.value = 520
+    this.windFilter = ctx.createBiquadFilter()
+    this.windFilter.type = 'bandpass'
+    this.windFilter.frequency.value = 950
+    this.windFilter.Q.value = .46
     this.windNoiseGain = ctx.createGain()
     this.windNoiseGain.gain.value = 0
-    noise.connect(windFilter).connect(this.windNoiseGain).connect(this.master)
+    noise.connect(this.windFilter).connect(this.windNoiseGain).connect(this.master)
     noise.start()
   }
 
   async resume() { await this.context.resume() }
 
   update(kind: VehicleKind, throttle: number, airspeed: number, paused: boolean, rpm?: number,
-    spec?: AircraftSpec, flight?: FlightState, listener?: Vec3) {
+    spec?: AircraftSpec, flight?: FlightState, listener?: Vec3, listenerHeading = 0) {
     const now = this.context.currentTime
     const t = engineTimbre(kind, throttle, airspeed, rpm)
-    const scope = flight ? soundPerspective(flight, listener) : { gain: 1, doppler: 1 }
-    const physicalBlade = spec ? bladePassageFrequency(spec, rpm ?? throttle) : t.blade
-    const engineLevel = spec ? clamp((rpm ?? throttle) * 2, 0, 1) : 1
-    this.prop.frequency.setTargetAtTime(t.fundamental * scope.doppler, now, .1)
-    this.harmonic.frequency.setTargetAtTime(t.harmonic * scope.doppler, now, .12)
-    this.blade.frequency.setTargetAtTime(clamp(physicalBlade * scope.doppler, 16, 8300), now, .1)
-    this.whine.frequency.setTargetAtTime(t.whine * scope.doppler, now, .16)
+    const scope = flight ? soundPerspective(flight, listener, listenerHeading) : { gain: 1, doppler: 1, pan: 0, lowpass: 17000 }
+    const spin = Number.isFinite(rpm) ? rpm! : Number.isFinite(throttle) ? throttle : 0
+    const physicalBlade = spec ? bladePassageFrequency(spec, spin) : t.blade
+    const engineLevel = spec ? clamp(spin * 2.6, 0, 1) : 1
+    if (this.profile !== kind) {
+      this.prop.setPeriodicWave(this.waves[kind])
+      this.profile = kind
+    }
+    const rotor = kind === 'helicopter'
+    const propeller = kind === 'trainer'
+    const blades = Math.max(2, spec?.visual.propBlades ?? 2)
+    const base = rotor && spec ? physicalBlade : propeller && spec ? physicalBlade / blades : t.fundamental
+    const bladeTone = clamp(physicalBlade * scope.doppler, 16, 8300)
+    const whine = kind === 'jet' && physicalBlade > 0 ? .43 * physicalBlade : t.whine
+    let exhaust = 1
+    if (kind === 'jet' && flight && listener) {
+      const [x, , z] = flight.position
+      const distance = Math.hypot(x - listener[0], z - listener[2])
+      if (distance > 1) exhaust *= .83 + .17 * ((x - listener[0]) * Math.sin(flight.yaw) + (z - listener[2]) * Math.cos(flight.yaw)) / distance
+    }
+    this.prop.frequency.setTargetAtTime(clamp(base * scope.doppler, 18, 4500), now, .1)
+    this.harmonic.frequency.setTargetAtTime(clamp(base * (kind === 'drone' ? 1.037 : 2.01) * scope.doppler, 22, 8500), now, .12)
+    this.blade.frequency.setTargetAtTime(bladeTone, now, .1)
+    this.whine.frequency.setTargetAtTime(clamp(whine * scope.doppler, 60, 6500), now, .16)
     this.propGain.gain.setTargetAtTime(t.tonalGain * engineLevel, now, .08)
     this.harmonicGain.gain.setTargetAtTime(t.tonalGain * .26 * engineLevel, now, .08)
-    this.bladeGain.gain.setTargetAtTime(t.bladeGain * engineLevel, now, .1)
-    this.whineGain.gain.setTargetAtTime(t.whineGain * engineLevel, now, .13)
+    this.bladeGain.gain.setTargetAtTime(t.bladeGain * engineLevel * (rotor ? .36 : .8), now, .1)
+    this.whineGain.gain.setTargetAtTime(t.whineGain * engineLevel * .7, now, .13)
     this.engineFilter.frequency.setTargetAtTime(t.noiseFilter, now, .12)
-    this.engineNoiseGain.gain.setTargetAtTime(t.engineNoise * engineLevel, now, .12)
-    this.windNoiseGain.gain.setTargetAtTime(t.windNoise, now, .18)
+    this.engineNoiseGain.gain.setTargetAtTime(t.engineNoise * engineLevel * exhaust, now, .12)
+    this.windFilter.frequency.setTargetAtTime(650 + 2400 * t.windNoise, now, .18)
+    this.windNoiseGain.gain.setTargetAtTime(t.windNoise * (listener ? .20 : .95), now, .18)
+    this.distanceFilter.frequency.setTargetAtTime(scope.lowpass, now, .14)
+    this.panner.pan.setTargetAtTime(scope.pan, now, .11)
     this.master.gain.setTargetAtTime(paused ? 0 : t.volume * scope.gain, now, paused ? .06 : .13)
   }
 

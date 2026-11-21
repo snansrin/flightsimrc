@@ -438,3 +438,49 @@ main { max-width: 1840px; padding-inline: clamp(12px, 2.7vw, 46px); }
   .earth-form button[type="submit"] { flex: 1 0 100%; }
   .earth-status { top: 59px; }
 }
+
+.simtop-actions { display: flex; gap: 6px; }
+.simtop .hangar-launch { background: #203b45; border: 1px solid #698992; border-radius: 5px; padding: 7px 11px; font-weight: 700; color: #eef9f6; white-space: nowrap; }
+.aircraft-hangar {
+  background: #13242b;
+  border: 1px solid #4c676d;
+  border-radius: 14px;
+  color: #eff4ef;
+  width: min(1000px, calc(100vw - 22px));
+  max-width: none;
+  max-height: calc(100dvh - 22px);
+  overflow: auto;
+  padding: 0;
+  box-shadow: 0 24px 75px #071315cb;
+}
+.aircraft-hangar::backdrop { background: #081016c9; }
+.hangar-heading { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #38535b; }
+.hangar-heading h2 { margin: 0; font-size: 1.35rem; }
+.aircraft-hangar button { color: inherit; border: 1px solid #4b686e; border-radius: 5px; background: #20363e; padding: 7px 11px; }
+.aircraft-hangar button:focus-visible, .hangar-turntable:focus-visible { outline: 2px solid #9ad5c6; outline-offset: -2px; }
+.hangar-layout { display: grid; grid-template-columns: minmax(175px, 235px) minmax(0, 1fr); }
+.hangar-list { display: flex; flex-direction: column; overflow: auto; height: clamp(315px, 55dvh, 525px); padding: 10px; gap: 5px; border-right: 1px solid #38535b; scrollbar-width: thin; scrollbar-color: #657e87 #182a32; }
+.aircraft-hangar .hangar-list button { display: flex; gap: 9px; align-items: center; text-align: left; background: none; border-color: transparent; }
+.aircraft-hangar .hangar-list button[aria-pressed="true"], .aircraft-hangar .hangar-list button:hover { border-color: #648c8b; background: #253f48; }
+.hangar-list i { width: 4px; height: 28px; border-radius: 3px; flex: none; }
+.hangar-list strong, .hangar-list small { display: block; }
+.hangar-list small { color: #a5bac0; font-size: .72rem; margin-top: 3px; }
+.hangar-preview { height: clamp(315px, 55dvh, 525px); display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; overflow: hidden; }
+.hangar-turntable { touch-action: none; cursor: grab; background: radial-gradient(ellipse at 53% 48%, #587078 0%, #283b44 52%, #151f28 95%); }
+.hangar-turntable:active { cursor: grabbing; }
+.hangar-view-controls { padding: 8px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; border-top: 1px solid #384f59; }
+.hangar-view-controls small { margin-right: 4px; color: #b9ccd0; font-size: .72rem; }
+.hangar-view-controls label { display: flex; align-items: center; gap: 6px; font-size: .76rem; color: #b9ccd0; }
+.hangar-view-controls input { width: clamp(55px, 12vw, 120px); accent-color: #9de3d2; }
+.hangar-selection { grid-column: 1 / -1; border-top: 1px solid #38535b; padding: 13px 18px; display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.hangar-selection h3, .hangar-selection p { margin: 0; }
+.hangar-selection p { color: #b3c6c8; font-size: .83rem; margin-top: 5px; }
+.aircraft-hangar .hangar-confirm { background: #8bd9c4; border-color: #8bd9c4; color: #162a32; font-weight: 700; white-space: nowrap; }
+@media (max-width: 640px) {
+  .hangar-layout { grid-template-columns: minmax(0, 1fr); }
+  .hangar-list { flex-direction: row; height: auto; padding: 6px; border-right: none; }
+  .hangar-list button { flex: 0 0 auto; white-space: nowrap; }
+  .hangar-preview { height: clamp(260px, 46dvh, 410px); }
+  .hangar-view-controls button { padding: 5px 7px; font-size: .77rem; }
+  .hangar-selection { align-items: flex-start; }
+}

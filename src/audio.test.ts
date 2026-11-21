@@ -15,6 +15,10 @@ describe('procedural engine sound profile', () => {
     expect(far.gain).toBeLessThan(near.gain)
     expect(far.doppler).toBeGreaterThan(1)
     expect(near.doppler).toBeLessThan(1)
+    expect(far.lowpass).toBeLessThan(near.lowpass)
+    expect(near.pan).toBeGreaterThan(0)
+    const rotated = soundPerspective({ position: [10, 0, 0], velocity: [0, 0, 0] }, [0, 0, 0], Math.PI)
+    expect(rotated.pan).toBeLessThan(0)
   })
   it('increases engine frequency and filtered noise with throttle', () => {
     const idle = engineTimbre('trainer', 0, 0, 0)

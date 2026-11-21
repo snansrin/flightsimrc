@@ -119,12 +119,32 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
       </group>)}
       <group position={[0, 0, tail - .01]} rotation={[0, Math.PI, 0]}>
         <mesh><torusGeometry args={[prop.diameter * .435, .006, 10, 32]} /><meshStandardMaterial color="#78838b" metalness={.72} roughness={.35} /></mesh>
-        <mesh><circleGeometry args={[prop.diameter * .43, 32]} /><meshStandardMaterial color="#10181e" roughness={.9} /></mesh>
+        <mesh position={[0, 0, -.004]}><circleGeometry args={[prop.diameter * .43, 32]} /><meshStandardMaterial color="#10181e" roughness={.9} /></mesh>
+        <group ref={spinner}>
+          {Array.from({ length: 11 }, (_, index) => <group key={index} rotation={[0, 0, index * Math.PI * 2 / 11]}>
+            <mesh position={[.019, 0, -.002]} rotation={[0, .27, -.36]}>
+              <boxGeometry args={[.028, .0036, .004]} /><meshStandardMaterial color="#626c73" metalness={.7} roughness={.4} />
+            </mesh>
+          </group>)}
+          <mesh scale={[.009, .009, .004]}><sphereGeometry args={[1, 16, 10]} /><meshStandardMaterial color="#9aa5ad" metalness={.71} roughness={.33} /></mesh>
+        </group>
       </group>
     </>}
     {visual.canopy !== 'none' && <mesh geometry={canopy}>
       <meshPhysicalMaterial vertexColors metalness={.23} roughness={.22} clearcoat={.85} />
     </mesh>}
+    {visual.canopy === 'greenhouse' && [-1, 1].map(side => <mesh key={side}
+      position={[side * radius * .92, radius * .34, nose - length * .34]} rotation={[0, side * .06, 0]}>
+      <boxGeometry args={[.003, .006, length * .039]} /><meshStandardMaterial color="#b9c2c5" metalness={.58} roughness={.36} />
+    </mesh>)}
+    {spec.id === 'warbird1400' && <group position={[0, 0, nose + .001]}>
+      <mesh><circleGeometry args={[radius * .687, 48]} /><meshStandardMaterial color="#292e31" roughness={.79} /></mesh>
+      {Array.from({ length: 7 }, (_, index) => <group key={index} rotation={[0, 0, index * Math.PI * 2 / 7]}>
+        <mesh position={[0, radius * .48, .004]}><boxGeometry args={[.013, radius * .29, .008]} />
+          <meshStandardMaterial color="#586064" metalness={.76} roughness={.42} />
+        </mesh>
+      </group>)}
+    </group>}
     {['trainer1500', 'cub800', 'float1200'].includes(spec.id) && [-1, 1].map(side => {
       const span = spec.span * .31
       const upper = wingY + span * dihedral
@@ -181,6 +201,9 @@ export function FixedWing({ spec, controls, state }: { spec: AircraftSpec; contr
           else wheels.current.delete(gear.id)
         }}>
           <mesh position={[0, -down / 2, 0]}><cylinderGeometry args={[.007, .007, Math.abs(down), 8]} /><meshStandardMaterial color={visual.trim} metalness={.7} /></mesh>
+          {gear.retractChannel >= 0 && <mesh position={[0, -down * .6, -.008]} rotation={[0, 0, .04]}>
+            <boxGeometry args={[gear.radius * .72, down * .56, .005]} /><meshPhysicalMaterial color={visual.color} roughness={.42} clearcoat={.2} />
+          </mesh>}
           <mesh position={[0, -down, 0]} rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[gear.radius, gear.radius, gear.radius * .48, 16]} />
             <meshStandardMaterial color="#252927" roughness={.8} /></mesh>
           {[-1, 1].map(side => <mesh key={side} position={[side * gear.radius * .245, -down, 0]} rotation={[0, 0, Math.PI / 2]}>

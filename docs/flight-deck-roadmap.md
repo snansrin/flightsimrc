@@ -26,7 +26,13 @@ All eight training scenes use bundled aerial imagery. The seven exercise presets
 | Şehir Meydanı | Central Park, New York | 40.78165, -73.96657 | 3.0 km |
 | Ada Lagünü | Indian River Lagoon, Florida | 27.44375, -80.30980 | 3.3 km |
 
-The crops use the USGS Imagery Only export service in EPSG:3857. They are stored as WebP files and are loaded when the relevant scene is selected. Central Park additionally streams nearby OpenStreetMap building geometry where the vector service is available.
+The crops use the USGS Imagery Only export service in EPSG:3857. They are stored as WebP files and are loaded when the relevant scene is selected. Scenes with source coordinates stream nearby OpenStreetMap buildings and woodland through OpenFreeMap. Window patterns, roof shapes and individual tree placement are procedural. The underlying footprint and height estimates come from OpenMapTiles where available. Ground grain appears only at short range to supplement the source image.
+
+## Aircraft hangar and sound
+
+Use **Uçak seç** above the flight view to open the 3D hangar. Drag the aircraft or use the rotation controls. **Bu modelle uç** applies the selection and spawns the aircraft. Closing the hangar resumes the previous flight. Flight physics pauses while browsing.
+
+The previews use the same meshes as flight. Drone motor spacing and rotor size follow the aircraft class. The Viper shows an animated fan in the exhaust, the T-28 has a detailed cowling, and retractable wheels include cover panels. Engine audio uses separate harmonic profiles for propeller, EDF, helicopter and multicopter. Ground-pilot mode adds stereo movement, distance filtering and Doppler. The sound is generated with Web Audio and uses simulated engine speed.
 
 The fixed-wing models use aircraft-specific fuselage cross-sections, swept tail meshes, fitted canopies and independent hinged surfaces. The Viper includes intake and exhaust geometry, the T‑28 has a radial cowling and a three-blade propeller. Select **Model inceleme** in **Görüş** for a close three-quarter view. Aerodynamic and controller settings are shared with the existing aircraft.
 

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client'
 import type { Controls } from './flight'
 import { hasTravel, axisSignalSummary, observeTravel, validCalibration, type Travel, flightChannels, standardMapping, calibrateAxis, defaultMapping, defaultTuning, defaultChannels, deviceSources, detectMovedSource, gamepadControls, normalizeSource, readSource, type Mapping, type InputSource, type AxisKey, type InputTuning, type Calibration } from './input'
 import { hidApi, openHidController, type HidController, type HidDeviceLike } from './hid'
-import { hangar, hangarAircraft, soundFamily } from './hangar'
+import { hangarAircraft, soundFamily } from './hangar'
 import { airfieldPilotPosition, fields } from './sim/fields'
 import { assistProfiles } from './sim/simulation'
 import { assessLesson, beginLesson, lessons, type Lesson, type LessonRun } from './school'
@@ -21,6 +21,7 @@ import { connectRoom, createRoomCode, normalizePilotName, normalizeRoomCode, roo
 import './style.css'
 
 const FlightScene = lazy(() => import('./scene/FlightScene'))
+const AircraftHangar = lazy(() => import('./AircraftHangar'))
 const WorldPicker = lazy(() => import('./WorldPicker'))
 const zero: Controls = { throttle: 0, aileron: 0, elevator: 0, rudder: 0 }
 type IndexedHid = HidController & { index: number }
@@ -124,6 +125,7 @@ function App() {
   activeCamera.current = cameraMode
   const [cameraZoom, setCameraZoom] = useState(1.15)
   const [showSettings, setShowSettings] = useState(false)
+  const [showHangar, setShowHangar] = useState(false)
   const [showRoom, setShowRoom] = useState(false)
   const commandFlaps = useCallback((next: AirframeConfiguration['flaps']) => {
     if (!engine.spec.flaps) return
@@ -142,7 +144,7 @@ function App() {
     setConfiguration({ ...configuration.current, gearDown: !configuration.current.gearDown })
   }, [engine, setConfiguration])
   useEffect(() => {
-    if (showSettings || showRoom) return
+    if (showSettings || showRoom || showHangar) return
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
       if (e.target instanceof HTMLElement && (e.target.closest('input,select,button,textarea') || e.target.isContentEditable)) return
@@ -155,7 +157,7 @@ function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [commandFlaps, commandGear, engine, showRoom, showSettings])
+  }, [commandFlaps, commandGear, engine, showHangar, showRoom, showSettings])
   const [roomInput, setRoomInput] = useState(() => normalizeRoomCode(new URLSearchParams(location.search).get('room') || ''))
   const [pilotName, setPilotName] = useState(() => localStorage.getItem('flight-pilot-name') || '')
   const [roomPassword, setRoomPassword] = useState('')
@@ -257,7 +259,9 @@ function App() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur) }
   }, [])
   useEffect(() => {
-    const listener = airfieldPilotPosition(world?.field ?? fields[fieldIndex])
+    const currentField = world?.field ?? fields[fieldIndex]
+    const listener = airfieldPilotPosition(currentField)
+    const listenerHeading = currentField.runway.heading * Math.PI / 180
     let frame = 0, last = performance.now(), accumulator = 0, display = 0
     const tick = (now: number) => {
       const delta = Math.min((now - last) / 1000, 0.1); last = now
@@ -348,7 +352,7 @@ function App() {
         controls.current = { throttle: Math.max(0, Math.min(1, controls.current.throttle + ((k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0)) * delta * .45)), aileron: controls.current.aileron + (target.aileron - controls.current.aileron) * response, elevator: controls.current.elevator + (target.elevator - controls.current.elevator) * response, rudder: controls.current.rudder + (target.rudder - controls.current.rudder) * response }
       }
       const waitingForTerrain = Boolean(world && imagery === 'loading')
-      if (!paused && !showWorld && !changedDevice && !waitingForTerrain) {
+      if (!paused && !showWorld && !showHangar && !changedDevice && !waitingForTerrain) {
         accumulator += delta
         while (accumulator >= 1 / 60) {
           applyDisplayControls(simulation.current, controls.current, configuration.current)
@@ -359,13 +363,13 @@ function App() {
         }
       }
       sound.current?.update(soundFamily(vehicle), controls.current.throttle, flight.current.airspeed,
-        paused || showWorld || waitingForTerrain || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
-        activeCamera.current === 'pilot' ? listener : undefined)
+        paused || showWorld || showHangar || waitingForTerrain || flight.current.crashed, flight.current.engineSpeed, simulation.current.spec, flight.current,
+        activeCamera.current === 'pilot' ? listener : undefined, listenerHeading)
       if (now - display > 100) { setHud({ ...flight.current }); if (lessonRun.current) setLessonHud({ ...lessonRun.current }); setPadAxes(pad ? [...pad.axes] : []); setAxisTravel(travel.current.axes.map(range => range && { ...range })); setPadButtons(pad ? pad.buttons.map(button => button.value) : []); display = now }
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame)
-  }, [calibration, controllerArmed, fieldIndex, imagery, mapping, selectedPadIndex, tuning, paused, setup, vehicle, world, showWorld])
+  }, [calibration, controllerArmed, fieldIndex, imagery, mapping, selectedPadIndex, tuning, paused, setup, vehicle, world, showWorld, showHangar])
   const clearLesson = () => {
     lessonRun.current = null
     setLessonHud(null)
@@ -687,7 +691,10 @@ function App() {
   return <main><header><div className="brand"><img className="brand-icon" src={`${import.meta.env.BASE_URL}flightsimrc.svg`} width="44" height="44" alt="" /><div><strong>FlightSim<span>RC</span></strong><small>UÇUŞ AKADEMİSİ</small></div></div><nav><span className="live">● {roomStatus === 'connected' ? `ODA ${roomCode} · ${roomCount} PİLOT` : 'SOLO EĞİTİM'}</span><button onClick={() => setShowRoom(true)}>◎ Çok oyunculu</button><button onClick={() => { setShowSettings(!showSettings); setPaused(true); keys.current.clear() }}>⚙ Kumanda ayarları</button></nav></header>
     <section className="sim" ref={simRef}>
       <div className="simtop"><div>{aircraft.name} <span className="sep">/</span> {aircraft.category}</div>
-        <button className="earth-launch" type="button" disabled={Boolean(roomCode)} onClick={() => { keys.current.clear(); setShowWorld(true) }}>Dünya haritası</button>
+        <div className="simtop-actions">
+          <button className="hangar-launch" type="button" aria-haspopup="dialog" onClick={() => { keys.current.clear(); setShowHangar(true) }}>Uçak seç</button>
+          <button className="earth-launch" type="button" disabled={Boolean(roomCode)} onClick={() => { keys.current.clear(); setShowWorld(true) }}>Dünya haritası</button>
+        </div>
         <div className="flight-status">AGL {Math.round(Math.max(0, engine.state.agl))} m · Gaz %{Math.round(controls.current.throttle * 100)} · {padName.slice(0, 42)}{padName !== 'Klavye' && !controllerArmed ? ' · Kumanda ayarlarından etkinleştir' : ''}</div></div>
       <div className="viewport">
         <Suspense fallback={<div className="scene-loading" role="status">Uçuş alanı yükleniyor…</div>}>
@@ -712,9 +719,6 @@ function App() {
         </div>}
       </div>
       <div className="toolbar">
-        <label>MODEL <select value={vehicle} onChange={e => { const next = e.target.value; setVehicle(next); reset(next) }}>
-          {hangar.map(({ id, spec }) => <option key={id} value={id}>{spec.name} · {spec.category}</option>)}
-        </select></label>
         <label>EĞİTİM SAHASI <select value={world ? 'world' : fieldIndex} disabled={Boolean(roomCode)} onChange={e => {
           const nextField = Number(e.target.value)
           const nextVehicle = fields[nextField].runway.surface === 'water' ? 'float1200' : vehicle
@@ -758,7 +762,7 @@ function App() {
           {configMessage && <span role="status">{configMessage}</span>}
         </div>}
         {field.orthophoto && <a className="terrain-credit" href={field.orthophoto.source} target="_blank" rel="noreferrer">{field.orthophoto.credit}</a>}
-        {field.id === 'sehir' && <div className="earth-credit">
+        {field.orthophoto?.center && <div className="earth-credit">
           <span><a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a></span>
         </div>}
         {world && <div className="earth-credit">
@@ -772,6 +776,13 @@ function App() {
       </div>
       {showWorld && <Suspense fallback={<div className="earth-picker" role="status">Dünya haritası açılıyor…</div>}>
         <WorldPicker initial={world?.start} onClose={closeWorld} onLaunch={launchWorld} />
+      </Suspense>}
+      {showHangar && <Suspense fallback={<div role="status">Hangar açılıyor…</div>}>
+        <AircraftHangar active={vehicle} onClose={() => { keys.current.clear(); setShowHangar(false) }} onSelect={next => {
+          keys.current.clear()
+          if (next !== vehicle) { setVehicle(next); reset(next) }
+          setShowHangar(false)
+        }} />
       </Suspense>}
     </section>
     <section className="academy" aria-labelledby="school-title">
